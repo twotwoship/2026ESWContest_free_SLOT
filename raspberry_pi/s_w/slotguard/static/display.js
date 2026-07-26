@@ -15,6 +15,8 @@
 
     const workflowScreens = new Set([
         "MOVING",
+        "RETURNING_HOME",
+        "RETURN_HOME_ERROR",
         "READY_TO_DISPENSE",
         "DISPENSING",
         "DISPENSED",
@@ -179,7 +181,21 @@
         const remaining = escapeHtml(formatRemaining(status.remaining_seconds));
         let html = "";
 
-        if (status.screen === "MOVING") {
+        if (status.screen === "RETURNING_HOME") {
+            html = `
+                <section class="lcd-workflow">
+                    <div class="lcd-spinner" aria-hidden="true"></div>
+                    <h1 class="lcd-title">기구가 원점으로 복귀 중입니다</h1>
+                    <p>기구부에 손을 넣지 마세요</p>
+                </section>`;
+        } else if (status.screen === "RETURN_HOME_ERROR") {
+            html = `
+                <section class="lcd-workflow">
+                    <h1 class="lcd-title">원점 복귀를 완료하지 못했습니다</h1>
+                    <p>장치 통신과 기구부를 확인해 주세요</p>
+                    <p>오류 코드: ${escapeHtml(schedule.home_error_code || "HOME-RETURN-ERROR")}</p>
+                </section>`;
+        } else if (status.screen === "MOVING") {
             const emptySlotMove = schedule
                 && schedule.error_code === "EMPTY_BLISTER_SLOT";
             html = `

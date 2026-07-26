@@ -1,6 +1,6 @@
 # 약SLOT-GUARD ATmega128A UART 구현명세
 
-문서 버전: v1.1  
+문서 버전: v1.3
 작성 기준일: 2026-08-24  
 대상: ATmega128A 펌웨어 개발팀  
 연동 상대: Raspberry Pi 4 / SLOT-GUARD Flask·UART 서비스
@@ -11,6 +11,7 @@
 
 1. MOVE: X/Y 스테핑모터를 대상 슬롯으로 이동
 2. DISPENSE: 사용자가 LCD 버튼을 누른 뒤 서보모터로 한 슬롯의 한 정을 배출
+3. 마지막 슬롯 `(1,0)` 성공 후 결과 ACK를 받으면 `(0,0)`으로 자동 복귀
 
 ## 2. UART 전기·프레임 규격
 
@@ -33,9 +34,10 @@
 - `00000000`은 사용하지 않는다.
 - Pi의 SQLite 시퀀스가 단조 증가 후 순환한다.
 - MOVE와 DISPENSE는 서로 다른 요청번호다.
+- TIMEOUT의 번호는 신규 요청번호가 아니라 종료할 MOVE 요청번호를 참조한다.
 - ACK가 없을 때 Pi는 10초마다 같은 요청번호와 같은 전체 페이로드를 재전송한다.
 - ATmega는 요청번호만 비교하지 않고 명령 종류와 전체 페이로드 일치도 확인한다.
-- 같은 요청번호에 다른 명령 또는 좌표가 오면 동작하지 않고 `ID_CONFLICT`를 반환한다.
+- TIMEOUT 참조를 제외하고, 같은 요청번호에 다른 명령 또는 좌표가 오면 동작하지 않고 `ID_CONFLICT`를 반환한다.
 
 ## 4. 명령 및 응답
 
@@ -84,7 +86,28 @@ Pi → AT: ACK|00000002|RESULT
 
 DISPENSE 좌표는 마지막 READY 상태의 MOVE 좌표와 반드시 일치해야 한다. 일치하지 않으면 서보모터를 움직이지 않는다.
 
-### 4.3 RESULT의 XYR
+### 4.3 TIMEOUT
+
+```text
+TIMEOUT|RRRRRRRR\n
+```
+
+`RRRRRRRR`은 새 요청번호가 아니라 현재 `READY` 상태를 만든 MOVE 요청번호다. Pi는 복약 허용시간이 끝났지만 DISPENSE가 시작되지 않은 경우 다음 순서로 TIMEOUT을 보낸다.
+
+```text
+Pi → AT: TIMEOUT|00000001
+AT: READY 해제, 좌표 유지, 다음 MOVE 허용 상태 저장
+AT → Pi: ACK|00000001|TIMEOUT
+```
+
+- ATmega는 MOVE 요청번호가 현재 READY와 일치할 때만 READY를 해제한다.
+- 스테핑모터와 서보모터를 새로 구동하지 않으며 현재 좌표는 유지한다.
+- TIMEOUT 처리 상태를 EEPROM에 먼저 저장한 뒤 ACK한다.
+- 같은 TIMEOUT을 다시 받으면 상태를 다시 바꾸지 않고 같은 ACK만 재전송한다.
+- TIMEOUT ACK 후에는 새 요청번호의 MOVE를 받아야 한다.
+- MOVING, DISPENSING, RESULT_READY에는 Pi가 TIMEOUT을 보내지 않는다.
+
+### 4.4 RESULT의 XYR
 
 ```text
 RESULT|RRRRRRRR|XYR\n
@@ -111,11 +134,14 @@ ATmega는 RESULT를 보낸 후 Pi의 `ACK|요청번호|RESULT`를 기다린다. 
 
 `R=2`의 RESULT ACK 후 Pi는 같은 복약 일정의 다음 좌표로 새 MOVE를 보낼 수 있다. ATmega는 RESULT ACK로 이전 DISPENSE를 종료한 뒤 이 새 요청번호의 MOVE를 정상적인 신규 명령으로 받아야 한다.
 
-### 4.4 ERROR
+### 4.5 ERROR
 
 ```text
+ERROR|INVALID_FORMAT\n
 ERROR|RRRRRRRR|ERROR_CODE\n
 ```
+
+Pi에서 받은 프레임의 형식이 잘못된 경우에는 요청번호를 복구하거나 임의로 채우지 않고 `ERROR|INVALID_FORMAT`만 보낸다. 그 밖의 장치 오류는 정상적으로 수신한 요청의 8자리 요청번호를 포함한다.
 
 권장 오류코드:
 
@@ -126,7 +152,7 @@ ERROR|RRRRRRRR|ERROR_CODE\n
 | INVALID_TIME | 허용시간 범위 오류 |
 | ID_CONFLICT | 같은 요청번호에 다른 데이터 수신 |
 | BUSY | 다른 요청을 수행 중 |
-| NOT_READY | MOVE WAIT 이전 DISPENSE 수신 |
+| NOT_READY | MOVE WAIT 이전 DISPENSE 또는 READY/TIMED_OUT가 아닌 TIMEOUT 수신 |
 | COORD_MISMATCH | DISPENSE 좌표와 READY 좌표 불일치 |
 | RECOVERY_REQUIRED | 동작 중 리셋되어 물리 상태를 확정할 수 없음 |
 | STEPPER_ERROR | 위치 이동 실패 |
@@ -135,15 +161,20 @@ ERROR|RRRRRRRR|ERROR_CODE\n
 
 오류코드는 영문 대문자, 숫자, `_`, `-`만 사용하고 최대 40자로 제한한다.
 
+`INVALID_FORMAT`은 일정 실패 보고가 아니라 **Pi가 마지막으로 송신한 프레임의 즉시 재전송 요청**이다. ATmega는 항상 요청번호 없는 `ERROR|INVALID_FORMAT`을 보내고, Pi는 마지막으로 송신에 성공한 MOVE, DISPENSE, TIMEOUT 또는 RESULT ACK 전체를 그대로 다시 보낸다. 다른 ERROR 코드는 기존처럼 요청번호를 포함하며 현재 일정을 통신 오류로 종료할 수 있다.
+
 ## 5. ATmega 상태머신
 
 ```text
 IDLE
  └─ 새 MOVE → MOVE_ACCEPTED → MOVING → READY
+      ├─ TIMEOUT → TIMED_OUT
       └─ 새 DISPENSE → DISPENSE_ACCEPTED → DISPENSING → RESULT_READY
-           └─ RESULT ACK → RESULT_ACKED
+           ├─ 일반 RESULT ACK → RESULT_ACKED
+           └─ 좌표 10의 R=1 ACK → HOMING → IDLE
 
-빈 슬롯의 다음 좌표, 새 블리스터 및 다음 예약의 새 MOVE → MOVE_ACCEPTED
+TIMED_OUT, 빈 슬롯의 다음 좌표, 새 블리스터 및 다음 예약의 새 MOVE
+  → MOVE_ACCEPTED
 ```
 
 | 상태 | 허용 입력 | 동작 |
@@ -151,13 +182,30 @@ IDLE
 | IDLE | 새 MOVE | EEPROM 저장, ACK, 스테핑 시작 |
 | MOVING | 같은 MOVE | 모터 재시작 금지, ACK만 재전송 |
 | READY | 같은 MOVE | WAIT 재전송 |
+| READY | 같은 MOVE ID의 TIMEOUT | `TIMED_OUT` 저장, 좌표 유지, TIMEOUT ACK |
 | READY | 좌표가 같은 새 DISPENSE | EEPROM 저장, ACK, 서보 1회 시작 |
 | READY | 다른 MOVE/DISPENSE | BUSY 또는 COORD_MISMATCH |
+| TIMED_OUT | 같은 TIMEOUT | 상태 변경 없이 TIMEOUT ACK 재전송 |
+| TIMED_OUT | 새 요청번호 MOVE | EEPROM 저장, 새 좌표 이동 시작 |
 | DISPENSING | 같은 DISPENSE | 서보 재시작 금지, ACK만 재전송 |
 | RESULT_READY | 같은 DISPENSE | 저장된 RESULT 재전송 |
-| RESULT_READY | RESULT ACK | 완료 표시, 결과 캐시는 유지 |
+| RESULT_READY | 일반 RESULT ACK | 완료 표시, 결과 캐시는 유지 |
+| RESULT_READY | 좌표 10의 R=1 ACK | X/Y를 00으로 복귀한 뒤 IDLE |
 | RESULT_ACKED | 새 요청번호 MOVE | EEPROM 저장, 새 좌표 이동 시작 |
-| 모든 상태 | 같은 ID+다른 데이터 | ID_CONFLICT, 동작 금지 |
+| 모든 상태 | 같은 ID+다른 데이터 | TIMEOUT 참조를 제외하고 ID_CONFLICT, 동작 금지 |
+
+### 5.1 슬롯 순회와 마지막 홈 복귀
+
+```text
+00 → 01 → 02 → 03 → 04 → 14 → 13 → 12 → 11 → 10
+```
+
+- 최초 위치는 `(0,0)`이다.
+- 상단 행은 Y가 증가하는 방향, 하단 행은 Y가 감소하는 방향으로 순회한다.
+- `04→14`는 같은 열에서 행만 바꾸므로 기존 `04→10`보다 이동거리가 짧다.
+- 마지막 좌표 `(1,0)`에서 배출 성공 `R=1`을 보내고 Pi의 RESULT ACK를 받으면 X/Y 스테핑모터를 `(0,0)`으로 자동 복귀시킨다.
+- 홈 복귀가 완료된 후에만 `IDLE`로 전환한다. 복귀 중 신규 MOVE/DISPENSE는 `BUSY` 처리한다.
+- 마지막 결과가 `R=0` 또는 `R=2`이면 자동 홈 복귀 조건이 아니다.
 
 ## 6. 중복 방지 저장 규칙
 
@@ -169,11 +217,12 @@ IDLE
 magic/version
 last_move_request_id
 last_move_x, last_move_y, allowed_seconds
-move_state: NONE / ACCEPTED / MOVING / READY
+move_state: NONE / ACCEPTED / MOVING / READY / TIMED_OUT
 last_dispense_request_id
 last_dispense_x, last_dispense_y
 dispense_state: NONE / ACCEPTED / DISPENSING / RESULT_READY / RESULT_ACKED
 last_result_xyr
+home_pending, current_position_x, current_position_y
 record_crc
 ```
 
@@ -201,11 +250,20 @@ DISPENSE:
 7. XYR과 `RESULT_READY` 기록
 8. RESULT 전송
 
+TIMEOUT:
+
+1. 프레임과 MOVE 요청번호 일치 검증
+2. 현재 `READY`이면 EEPROM에 `TIMED_OUT` 기록과 CRC 확인
+3. 서보 허용 상태 해제, 좌표 유지
+4. `ACK|요청번호|TIMEOUT` 전송
+5. 이미 `TIMED_OUT`이면 EEPROM 재기록 없이 ACK만 재전송
+
 EEPROM 기록이 완료되지 않으면 모터를 시작하면 안 된다.
 
 ### 6.3 ATmega 리셋 복구
 
 - READY 또는 RESULT_READY 상태였다면 저장된 WAIT 또는 RESULT를 재전송할 수 있다.
+- TIMED_OUT 상태였다면 같은 TIMEOUT에 ACK하고 새 MOVE를 받을 수 있다.
 - MOVING 또는 DISPENSING 도중 리셋된 경우 같은 요청을 자동으로 다시 구동하지 않는다.
 - 해당 요청번호에 `ERROR|요청번호|RECOVERY_REQUIRED`를 반환한다.
 - 사용자의 물리 점검과 새로운 요청 전까지 서보 재동작을 금지한다.
@@ -221,6 +279,7 @@ EEPROM의 마지막 요청번호는 새 요청이 완료되어도 즉시 삭제�
 - 숫자 필드는 모든 문자가 범위 내 숫자인지 확인한 뒤 변환한다.
 - 모터 동작 중에도 UART 수신과 ACK/상태 재전송이 가능해야 한다.
 - 모터 제어를 긴 blocking delay로 구현해 UART 버퍼를 넘치게 하면 안 된다.
+- 파싱 실패 시 요청번호 복구를 시도하지 않고 `ERROR|INVALID_FORMAT`을 보낸 뒤 Pi의 마지막 프레임 재수신을 기다린다. 모터 상태는 변경하지 않는다.
 
 ## 8. 타이밍 정책
 
@@ -231,7 +290,7 @@ EEPROM의 마지막 요청번호는 새 요청이 완료되어도 즉시 삭제�
 - RESULT: 서보 동작과 센서 판정이 끝난 후
 - 센서 감지 창·디바운스 값은 기구 통합시험으로 확정하고 상수로 문서화한다.
 
-ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판정과 신규 전송 중단은 Pi가 담당한다.
+ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판정은 Pi가 담당하고, ATmega는 Pi의 TIMEOUT을 받아 READY를 해제한다.
 
 ## 9. 안전 규칙
 
@@ -243,6 +302,10 @@ ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판
 6. R=2는 빈 슬롯 결과이며 ATmega가 다음 슬롯 MOVE나 DISPENSE를 자체 생성하지 않는다.
 7. RECOVERY_REQUIRED에서도 자동 재구동하지 않는다.
 8. 요청번호·상태·결과가 EEPROM CRC 검증에 실패하면 모터를 금지한다.
+9. TIMEOUT은 모터를 구동하지 않고 좌표를 변경하지 않는다.
+10. TIMEOUT ACK 전에는 다음 신규 MOVE를 처리하지 않는다.
+11. 마지막 좌표 10의 성공 RESULT ACK 후 홈 복귀가 끝나기 전에는 IDLE로 표시하지 않는다.
+12. INVALID_FORMAT 송신만으로 현재 요청을 실패·완료 처리하거나 모터를 다시 구동하지 않는다.
 
 ## 10. 통합시험 수용 기준
 
@@ -264,6 +327,14 @@ ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판
 | AT-14 | 전원 재인가 | EEPROM 상태·CRC 정상 복구 |
 | AT-15 | 빈 블리스터 슬롯 | 정확한 XY2 반환, RESULT ACK 후 새 MOVE 수용 |
 | AT-16 | 연속 빈 슬롯 | 각 DISPENSE에 XY2 반환, 각 새 MOVE·DISPENSE는 1회만 구동 |
+| AT-17 | READY 허용시간 종료 | TIMEOUT 수신, 좌표 유지, TIMEOUT ACK, 서보 미동작 |
+| AT-18 | TIMEOUT ACK 유실 | 같은 TIMEOUT 재수신에 ACK만 재전송 |
+| AT-19 | TIMEOUT 후 신규 MOVE | 신규 MOVE 수용, BUSY 미발생 |
+| AT-20 | TIMEOUT 후 전원 재인가 | TIMED_OUT 복구, 중복 TIMEOUT ACK와 신규 MOVE 수용 |
+| AT-21 | 지그재그 전 좌표 순회 | 00→01→02→03→04→14→13→12→11→10 순서 |
+| AT-22 | 마지막 성공 후 홈 복귀 | 좌표 10의 R=1 ACK 후 00 복귀, 그 뒤 IDLE |
+| AT-23 | MOVE INVALID_FORMAT | Pi의 같은 MOVE 재전송, 스테핑 중복 구동 없음 |
+| AT-24 | DISPENSE INVALID_FORMAT | Pi의 같은 DISPENSE 재전송, 서보 중복 구동 없음 |
 
 ## 11. 완전 예시
 
@@ -310,6 +381,23 @@ Pi > DISPENSE|00000002|0|0
 AT: 요청번호와 페이로드가 동일하므로 서보 재동작 금지
 AT < RESULT|00000002|001
 Pi > ACK|00000002|RESULT
+```
+
+사용자가 허용시간 안에 약 배출 버튼을 누르지 않은 경우:
+
+```text
+Pi > MOVE|00000001|0|0|003600
+AT < ACK|00000001|MOVE
+AT < WAIT|00000001
+
+# 예약 시각 + 허용시간 도달
+Pi > TIMEOUT|00000001
+AT: READY 해제, 좌표 00 유지, TIMED_OUT 저장
+AT < ACK|00000001|TIMEOUT
+
+# ACK가 유실되면 10초 후 같은 프레임
+Pi > TIMEOUT|00000001
+AT < ACK|00000001|TIMEOUT
 ```
 
 이 동작이 구현되어야 Pi의 허용시간까지 재전송 정책과 물리적 중복 배출 방지가 동시에 성립한다.

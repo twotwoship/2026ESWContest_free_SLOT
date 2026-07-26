@@ -1,6 +1,6 @@
 # 약SLOT-GUARD Raspberry Pi 전체 구현명세
 
-문서 버전: v1.1  
+문서 버전: v1.2
 작성 기준일: 2026-08-24  
 대상: Raspberry Pi 소프트웨어·시스템 통합·시험 담당자  
 대상 장치: Raspberry Pi 4 Model B Rev 1.5  
@@ -60,12 +60,12 @@ Raspberry Pi 로컬 X11 세션
 | Raspberry Pi | 예약·상태·화면·음성·통신의 중앙 조정 | 관리자 입력, LCD 터치, ATmega 응답 | DB 기록, LCD 화면, 음성, UART 명령 |
 | Flask 앱 | HTTP 화면/API와 구성요소 연결 | HTTP 요청 | HTML, JSON, DB/UART/음성 호출 |
 | SQLite | 영속 상태의 단일 기준 | 앱 트랜잭션 | 예약, 좌표, 요청번호, 설정, 이벤트 |
-| UART 서비스 | 예약 판정과 ATmega 프로토콜 수행 | DB 상태, ATmega 프레임 | MOVE, DISPENSE, RESULT ACK, 상태 변경 |
+| UART 서비스 | 예약 판정과 ATmega 프로토콜 수행 | DB 상태, ATmega 프레임 | MOVE, DISPENSE, TIMEOUT, RESULT ACK, 상태 변경 |
 | LCD 키오스크 | 환자용 현장 표시와 제한된 조작 | 1초 상태 폴링, 터치 | 배출, 확인, 설정, 전원 API |
 | 관리자 웹 | 관리자용 예약·상태·시간 관리 | 스마트폰/PC 브라우저 | 예약 CRUD 일부, 전체 초기화, 시간 동기화 |
 | 음성 관리자 | 복약 알림 반복과 소진 안내 | 일정 시작, 설정값, 중단 콜백 | cVLC 재생·중단 |
 | 시간 서비스 | 현재 부팅에서 시간 신뢰 여부 관리 | 스마트폰 Unix 시간 | 시스템 시각 변경, boot ID 기록 |
-| ATmega128A | 물리 동작과 센서 판정 | MOVE, DISPENSE | ACK, WAIT, RESULT, ERROR |
+| ATmega128A | 물리 동작과 센서 판정 | MOVE, DISPENSE, TIMEOUT | ACK, WAIT, RESULT, ERROR |
 | Chromium 키오스크 | LCD용 웹 UI 전용 실행 환경 | 로컬 Flask 화면 | 전체화면 렌더링·터치 이벤트 |
 
 ### 2.3 책임 경계 원칙
@@ -162,7 +162,7 @@ Pi 전원 인가
   → 커널이 SPI LCD·UART 오버레이 로드
   → systemd가 slotguard.service 시작
   → app.py가 인증 설정 로드
-  → SQLite 스키마 생성·v5 마이그레이션
+  → SQLite 스키마 생성·v7 마이그레이션
   → UART 작업 스레드 시작
   → Flask가 0.0.0.0:5000 수신
   → LightDM이 지정 사용자로 자동 로그인
@@ -325,11 +325,13 @@ SCHEDULED
   │              │          └─ 복용하지 못함 → FAILED 확인 → 좌표 유지
   │              │    └─ RESULT의 R=2 → EMPTY_BLISTER_SLOT 기록 → 다음 좌표
   │              │          ├─ 다음 좌표 있음 → 새 MOVE → WAIT → 사용자 재배출
-  │              │          └─ 마지막 좌표 14
+  │              │          └─ 마지막 좌표 10
   │              │                → 새 블리스터 초기화
   │              │                → 수동복약: MANUALLY_COMPLETED, 00→01
   │              │                → 수동미복약: 새 MOVE(00)로 동일 복약 재개
-  │              └─ 허용시간 종료 → MISSED
+  │              └─ 허용시간 종료
+  │                   → MISSED + TIMEOUT 전송
+  │                   → TIMEOUT ACK 후 다음 MOVE 허용
   └─ 이미 허용시간이 지난 일정 발견 → MISSED
 
 MOVING 또는 DISPENSING에서 허용시간 종료
@@ -391,7 +393,7 @@ LCD: 기존의 큰 약 배출 버튼 표시
 - 재시도 중 `XY0`이면 기존 R=0 실패 정책을 그대로 적용한다.
 - 이미 처리한 빈 슬롯 RESULT가 재수신되면 좌표를 다시 증가시키지 않고 RESULT ACK만 재전송한다.
 
-마지막 좌표 `14`에서 `142`를 받은 경우에는 소진 안내 후 새 블리스터 초기화를 요구한다. 초기화하면 좌표를 `00`으로 바꾸고 화면 전체의 약 배출 영역을 좌우 절반으로 나눈 대형 `수동복약` / `수동미복약` 버튼을 표시한다.
+마지막 좌표 `10`에서 `102`를 받은 경우에는 소진 안내 후 새 블리스터 초기화를 요구한다. 초기화하면 좌표를 `00`으로 바꾸고 화면 전체의 약 배출 영역을 좌우 절반으로 나눈 대형 `수동복약` / `수동미복약` 버튼을 표시한다.
 
 - `수동복약`: 새 블리스터의 00번 약을 직접 복용한 것으로 기록하고 `MANUALLY_COMPLETED`, 좌표 `01`로 종료한다.
 - `수동미복약`: 실패로 종료하지 않고 새 요청번호와 남은 허용시간으로 좌표 00의 MOVE를 보내 동일 복약을 계속한다. WAIT 후 기존 약 배출 버튼을 표시한다.
@@ -404,7 +406,7 @@ LCD: 기존의 큰 약 배출 버튼 표시
 - UART 작업 루프는 약 0.2초 간격으로 실행된다.
 - 예약 판정은 최대 0.5초에 한 번 수행한다.
 - UART 연결이 끊기면 5초 간격으로 재연결을 시도한다.
-- ACK 미수신 MOVE와 DISPENSE는 10초 간격으로 같은 요청을 재전송한다.
+- ACK 미수신 MOVE, DISPENSE, TIMEOUT은 10초 간격으로 같은 요청을 재전송한다.
 
 ### 9.2 처리 차단 조건
 
@@ -412,6 +414,7 @@ LCD: 기존의 큰 약 배출 버튼 표시
 
 - 현재 부팅에서 시스템 시간이 설정되지 않음
 - 확인되지 않은 `FAILED`, `MISSED`, `COMM_ERROR`가 있음
+- ACK되지 않은 TIMEOUT이 있음
 - 이미 활성 일정이 있음
 - 블리스터가 10칸 모두 사용되어 소진 상태임
 - 예정 시각이 아직 도달하지 않음
@@ -424,7 +427,8 @@ deadline = scheduled_at + allowed_seconds
 
 - 허용시간은 Pi가 첫 UART 프레임을 보낸 시각이 아니라 예약 시각부터 계산한다.
 - 예약을 늦게 발견했을 때 이미 deadline을 지났으면 MOVE를 보내지 않고 `MISSED` 처리한다.
-- READY에서 deadline이 지나면 `DOSE_BUTTON_TIMEOUT`으로 `MISSED` 처리한다.
+- READY에서 deadline이 지나면 `DOSE_BUTTON_TIMEOUT`으로 `MISSED` 처리하고 해당 MOVE ID의 TIMEOUT을 전송한다.
+- TIMEOUT ACK 전에는 다음 일정의 MOVE를 시작하지 않는다.
 - MOVING에서 deadline이 지나면 ACK 여부에 따라 `MOVE_ACK_TIMEOUT` 또는 `MOVE_READY_TIMEOUT`을 기록한다.
 - DISPENSING에서 deadline이 지나면 ACK 여부에 따라 `DISPENSE_ACK_TIMEOUT` 또는 `RESULT_TIMEOUT`을 기록한다.
 
@@ -433,6 +437,7 @@ deadline = scheduled_at + allowed_seconds
 - 앱 메모리의 활성 일정 ID는 재시작 시 사라진다.
 - UART 작업 스레드는 DB에서 `MOVING`, `READY_TO_DISPENSE`, `DISPENSING` 일정을 다시 찾는다.
 - 기존 MOVE·DISPENSE 요청번호와 좌표를 재사용한다.
+- DB에 ACK되지 않은 TIMEOUT이 있으면 같은 MOVE ID로 즉시 복구 전송하고 ACK까지 10초마다 재전송한다.
 - 물리 중복 구동 방지는 ATmega가 요청번호와 저장 상태를 이용해 보장해야 한다.
 - Pi와 ATmega의 재부팅이 물리 동작 중 발생했으면 사용자의 기구 상태 확인이 필요하다.
 
@@ -460,6 +465,7 @@ deadline = scheduled_at + allowed_seconds
 - SQLite `request_sequence`에서 트랜잭션으로 증가시킨다.
 - 최대값 다음에는 `00000001`로 순환한다.
 - MOVE와 DISPENSE는 각각 새로운 요청번호를 사용한다.
+- TIMEOUT은 신규 번호를 발급하지 않고 종료할 MOVE 요청번호를 참조한다.
 - `XY2` 후 다음 좌표 MOVE와 새 블리스터 `수동미복약` 재개 MOVE도 각각 새로운 요청번호를 사용한다.
 - 일정 삭제나 블리스터 초기화로 시퀀스를 되돌리지 않는다.
 
@@ -468,6 +474,7 @@ deadline = scheduled_at + allowed_seconds
 ```text
 MOVE|RRRRRRRR|X|Y|TTTTTT\n
 DISPENSE|RRRRRRRR|X|Y\n
+TIMEOUT|RRRRRRRR\n
 ACK|RRRRRRRR|RESULT\n
 ```
 
@@ -475,17 +482,22 @@ ACK|RRRRRRRR|RESULT\n
 |---|---|---|
 | MOVE | 예약 도달과 좌표 배정 후, 또는 빈 슬롯 후 재이동 | MOVE ACK 수신 또는 허용시간 종료 |
 | DISPENSE | LCD 약 배출 터치 후 | DISPENSE ACK 수신 또는 허용시간 종료 |
+| TIMEOUT | READY 상태에서 복약 허용시간 종료 | TIMEOUT ACK 수신 |
 | RESULT ACK | 유효 RESULT 수신 후 | 단발, 중복 RESULT에는 다시 전송 |
 
 최초 MOVE의 `TTTTTT`는 일정의 설정 허용시간이다. `XY2` 후 다음 좌표로 이동하거나 새 블리스터에서 `수동미복약`으로 재개할 때는 예약 시각과 허용시간으로 계산한 현재 남은 초를 별도 `move_allowed_seconds`에 저장한다. 같은 MOVE 요청번호를 재전송할 때는 시간이 흘러도 저장된 값을 바꾸지 않는다.
+
+TIMEOUT의 `RRRRRRRR`은 현재 READY를 만든 MOVE ID다. Pi는 일정을 즉시 `MISSED / DOSE_BUTTON_TIMEOUT`으로 종료하되 TIMEOUT ACK 상태를 별도로 영속화한다. ATmega가 READY를 해제했다는 ACK가 오기 전까지 새 MOVE를 보내지 않는다.
 
 ### 10.4 Pi 수신 프레임
 
 ```text
 ACK|RRRRRRRR|MOVE\n
 ACK|RRRRRRRR|DISPENSE\n
+ACK|RRRRRRRR|TIMEOUT\n
 WAIT|RRRRRRRR\n
 RESULT|RRRRRRRR|XYR\n
+ERROR|INVALID_FORMAT\n
 ERROR|RRRRRRRR|ERROR_CODE\n
 ```
 
@@ -494,8 +506,10 @@ ERROR|RRRRRRRR|ERROR_CODE\n
 | MOVE ACK | 활성 MOVE 요청번호·단계 | `move_ack_at` 기록 |
 | WAIT | 활성 MOVE 요청번호 | READY 상태와 `ready_at` 기록 |
 | DISPENSE ACK | 활성 DISPENSE 요청번호·단계 | `dispense_ack_at` 기록 |
+| TIMEOUT ACK | TIMEOUT 대기 중인 MOVE 요청번호 | `timeout_ack_at` 기록, 다음 MOVE 차단 해제 |
 | RESULT | 요청번호와 실제 XY 및 결과코드 0·1·2 일치 | 성공·실패 종료 또는 빈 슬롯 다음 좌표 재이동 |
-| ERROR | 활성 MOVE·DISPENSE 요청번호 | `COMM_ERROR`, `AT_` 접두 오류 |
+| INVALID_FORMAT | 요청번호 없는 정확한 전용 문자열 | 마지막 송신 성공 프레임을 그대로 즉시 재전송, 일정 상태 유지 |
+| ERROR | 활성 MOVE·DISPENSE 또는 대기 TIMEOUT 요청번호 | 활성 일정은 `COMM_ERROR`, TIMEOUT은 오류 로그 후 재전송 유지 |
 
 WAIT는 MOVE ACK가 먼저 도착하지 않았더라도 유효 요청번호이면 ACK를 내포한 것으로 처리하여 `move_ack_at`과 `ready_at`을 함께 기록한다.
 
@@ -509,11 +523,18 @@ WAIT는 MOVE ACK가 먼저 도착하지 않았더라도 유효 요청번호이�
 - RESULT의 R은 `0`, `1`, `2`만 허용한다.
 - 알 수 없는 프레임은 상태를 변경하지 않고 `last_error`와 journal에 남긴다.
 - 결과 좌표가 기대 좌표와 다르면 RESULT를 무시하고 일정은 `DISPENSING`에 유지한다.
+- `ERROR|INVALID_FORMAT`은 일정 실패로 저장하지 않는다. 메모리에 보관한 마지막 송신 성공 프레임을 요청번호 해석 없이 같은 바이트로 즉시 재전송한다.
+- 이전 송신 성공 프레임이 없는 상태에서 `ERROR|INVALID_FORMAT`을 받으면 재전송하지 않고 UART 오류만 기록한다.
+- 요청번호가 포함된 구형 `ERROR|요청번호|INVALID_FORMAT`은 유효 프레임으로 처리하지 않는다.
+- `INVALID_FORMAT` 이외의 유효 ERROR는 기존처럼 `COMM_ERROR / AT_오류코드`로 현재 일정을 종료한다.
 
 ### 10.6 중복과 재전송
 
 - MOVE ACK 전까지 같은 요청번호와 전체 페이로드를 10초마다 재사용한다.
 - DISPENSE ACK 전까지 같은 요청번호와 전체 페이로드를 10초마다 재사용한다.
+- TIMEOUT ACK 전까지 같은 MOVE ID의 TIMEOUT을 10초마다 재전송한다.
+- TIMEOUT 전송 대기와 ACK 시각은 DB에 저장하므로 Pi 재시작 후에도 재전송한다.
+- 중복 TIMEOUT ACK는 이미 기록된 ACK 시각을 바꾸지 않고 정상 입력으로 처리한다.
 - 완료된 요청의 RESULT가 다시 오면 DB와 좌표를 다시 변경하지 않고 RESULT ACK만 다시 보낸다.
 - 다음 좌표로 진행한 뒤 이전 `XY2` RESULT가 다시 와도 `event_log`의 처리 요청번호를 확인하여 ACK만 다시 보낸다.
 - ATmega는 같은 MOVE·DISPENSE 요청을 재수신해도 물리 모터를 다시 구동하지 않아야 한다.
@@ -537,16 +558,16 @@ XYR
 
 | 사용자 슬롯 | 내부 좌표 | 사용자 슬롯 | 내부 좌표 |
 |---|---|---|---|
-| 1 | 00 | 6 | 10 |
-| 2 | 01 | 7 | 11 |
+| 1 | 00 | 6 | 14 |
+| 2 | 01 | 7 | 13 |
 | 3 | 02 | 8 | 12 |
-| 4 | 03 | 9 | 13 |
-| 5 | 04 | 10 | 14 |
+| 4 | 03 | 9 | 11 |
+| 5 | 04 | 10 | 10 |
 
 ### 11.2 좌표 증가 규칙
 
 ```text
-00 → 01 → 02 → 03 → 04 → 10 → 11 → 12 → 13 → 14
+00 → 01 → 02 → 03 → 04 → 14 → 13 → 12 → 11 → 10
 ```
 
 - 좌표는 예약 등록 시가 아니라 해당 예약이 실제 시작될 때 배정한다.
@@ -555,7 +576,11 @@ XYR
 - 마지막 빈 슬롯 교체 후 `수동복약`에서도 새 블리스터 좌표가 `00→01`로 증가한다.
 - `R=0`의 `FAILED`, `MISSED`, `COMM_ERROR`는 현재 좌표를 유지한다.
 - 좌표 증가와 일정 완료 상태 변경은 하나의 SQLite 트랜잭션으로 처리한다.
-- 마지막 좌표 `14`가 완료되면 좌표는 `14`에 남고 `blister_exhausted=1`이 된다.
+- 마지막 논리 좌표 `10`이 완료되면 DB 좌표는 `10`에 남고 `blister_exhausted=1`이 된다.
+- 마지막 좌표 `10`의 R=1 RESULT ACK 후 ATmega는 물리 위치를 `00`으로 자동 복귀하고 IDLE이 된다. DB는 블리스터 교체 전까지 논리 좌표 `10`과 소진 상태를 유지한다.
+- v6 이하에서 사용 중이던 블리스터는 이미 사용한 실제 칸을 건너뛰거나 중복 사용하지 않도록 기존 경로 `00→01→02→03→04→10→11→12→13→14`를 끝까지 유지한다.
+- 새 블리스터 초기화 또는 전체 일정 초기화 후 `coordinate_path_version=2`가 되며 새 지그재그 경로를 사용한다.
+- 기존 경로의 마지막 `14`는 새 경로에서는 중간 슬롯이므로 ATmega가 자동 홈 조건으로 판단할 수 없다. 기존 블리스터 종료 후 초기화하고, 다음 MOVE에서 `00`으로 이동한다.
 
 ### 11.3 블리스터 초기화
 
@@ -575,14 +600,14 @@ XYR
 - 환경변수 `SLOTGUARD_DB_PATH`로 시험 DB 경로를 바꿀 수 있다.
 - 연결 타임아웃은 5초다.
 - 외래키 검사를 연결마다 활성화한다.
-- 현재 스키마 버전은 `PRAGMA user_version = 5`다.
+- 현재 스키마 버전은 `PRAGMA user_version = 7`이다.
 
 ### 12.2 테이블
 
 | 테이블 | 목적 | 주요 데이터 |
 |---|---|---|
 | `schedules` | 예약과 전체 처리 상태 | 약, 시각, 상태, 좌표, 요청번호, 단계별 시각, 오류 |
-| `device_state` | 블리스터 위치 단일 상태 | 현재 X/Y, 소진 여부, 변경 시각 |
+| `device_state` | 블리스터 위치 단일 상태 | 현재 X/Y, 소진 여부, 좌표 경로 버전, 변경 시각 |
 | `device_settings` | 음성 설정 단일 상태 | 반복 횟수, 볼륨 단계 |
 | `request_sequence` | UART 요청번호 단일 상태 | 마지막 정수 값 |
 | `event_log` | 상태·송수신·설정 감사 기록 | 일정 ID, 이벤트, 요청번호, 상세, 시각 |
@@ -596,15 +621,18 @@ XYR
 | 좌표 | `x_coordinate`, `y_coordinate` |
 | MOVE | `move_request_id`, `move_allowed_seconds`, `move_sent_at`, `move_ack_at`, `ready_at` |
 | DISPENSE | `dispense_request_id`, `dispense_sent_at`, `dispense_ack_at` |
+| TIMEOUT | `timeout_requested_at`, `timeout_sent_at`, `timeout_ack_at` |
 | 결과 | `result_at`, `completed_at`, `error_code`, `acknowledged_at` |
 
 ### 12.4 트랜잭션 원칙
 
 - 요청번호 발급과 MOVE·DISPENSE 준비는 트랜잭션으로 묶는다.
+- READY 만료의 MISSED 전이와 TIMEOUT 대기 등록은 한 트랜잭션으로 묶는다.
 - 완료 상태와 좌표 증가는 같은 트랜잭션으로 묶어 이중 증가를 방지한다.
 - 중복 RESULT는 현재 상태 조건에 걸려 두 번째 좌표 증가가 발생하지 않는다.
 - 이벤트 로그의 일정 외래키는 일정 삭제 시 NULL로 바뀐다.
-- 레거시 DB는 시작 시 현재 v5 구조로 마이그레이션하며 기존 일정을 보존한다.
+- 레거시 DB는 시작 시 현재 v7 구조로 마이그레이션하며 기존 일정을 보존한다.
+- v6 이하의 기존 `device_state`에는 `coordinate_path_version=1`을 부여해 현재 블리스터의 기존 경로를 보존한다. 새 DB와 블리스터 초기화 이후에는 버전 2 지그재그 경로를 사용한다.
 
 ### 12.5 주요 이벤트
 
@@ -617,6 +645,9 @@ XYR
 | DISPENSE_PREPARED | LCD 배출 요청 |
 | DISPENSE_SENT | DISPENSE UART 쓰기 성공 |
 | DISPENSE_ACK | 유효 ACK 또는 RESULT 수신 |
+| TIMEOUT_QUEUED | READY 허용시간 종료와 TIMEOUT 영속 대기 등록 |
+| TIMEOUT_SENT | TIMEOUT UART 쓰기 성공 및 재전송 |
+| TIMEOUT_ACK | 유효 TIMEOUT ACK 수신 |
 | DISPENSED | R=1 완료 |
 | FAILED | R=0 또는 실패 처리 |
 | EMPTY_BLISTER_SLOT | R=2 좌표·요청번호 기록 |
@@ -755,7 +786,8 @@ XYR
 | UART 포트 열기 실패 | DISCONNECTED | 장치 상태 확인 | 배선, 권한, serial0 확인 |
 | MOVE ACK 없음 | MOVE_ACK_TIMEOUT | 통신 오류 | AT 수신과 응답 로그 확인 |
 | ACK 후 WAIT 없음 | MOVE_READY_TIMEOUT | 통신 오류 | 모터 완료와 WAIT 송신 확인 |
-| 배출 버튼 미터치 | DOSE_BUTTON_TIMEOUT | 미복약 | 사용자 확인 |
+| 배출 버튼 미터치 | DOSE_BUTTON_TIMEOUT, TIMEOUT ACK 대기 | 미복약 | 사용자 확인, AT TIMEOUT ACK 확인 |
+| TIMEOUT ACK 없음 | MISSED 유지, 10초 재전송 | 미복약 | AT TIMEOUT 구현·UART 로그 확인 |
 | DISPENSE ACK 없음 | DISPENSE_ACK_TIMEOUT | 통신 오류 | AT 서보 요청 수신 확인 |
 | ACK 후 RESULT 없음 | RESULT_TIMEOUT | 통신 오류 | 센서 판정과 RESULT 확인 |
 | RESULT R=0 | NO_DROP_DETECTED | 배출 실패 | 직접 복용 여부 선택 |
@@ -763,7 +795,8 @@ XYR
 | RESULT R=2, 마지막 슬롯 | EMPTY_BLISTER_SLOT | 블리스터 교체 | 초기화 후 수동복약 여부 선택 |
 | 교체 중 허용시간 종료 후 수동미복약 | DOSE_WINDOW_EXPIRED | 미복약 | 화면 확인 |
 | RESULT 좌표 불일치 | 일정 유지, UART 오류 | 배출 중 유지 | AT의 저장 좌표 확인 |
-| AT ERROR | `AT_오류코드` | 통신 오류 | AT 명세에 따라 점검 |
+| AT INVALID_FORMAT | 현재 상태 유지, 같은 UART 프레임 즉시 재전송 | 진행 화면 유지 | 반복 시 배선·baud·프레임 생성 점검 |
+| 기타 AT ERROR | `AT_오류코드` | 통신 오류 | AT 명세에 따라 점검 |
 | DB 읽기 오류 | DB-READ-ERROR | 장치 오류 | 파일·디스크·권한 확인 |
 | 음성 파일 없음 | journal 경고 | 음성 없음 | MP3 배포 확인 |
 | 시간 helper 실패 | HTTP 503 | 시간 미설정 | helper와 sudoers 확인 |
@@ -863,7 +896,7 @@ sudo reboot
 
 ### 20.1 자동시험
 
-현재 자동시험은 29개이며 다음 범주를 포함한다.
+현재 자동시험은 39개이며 다음 범주를 포함한다.
 
 - UART v2 프레임 생성·파싱
 - MOVE·DISPENSE 요청번호 분리
@@ -877,6 +910,10 @@ sudo reboot
 - 중복 RESULT의 좌표 중복 증가 방지
 - RESULT 좌표 불일치 무시
 - 허용시간과 통신 오류 전이
+- READY 허용시간 종료의 TIMEOUT 즉시 전송과 DB 영속화
+- TIMEOUT 10초 재전송, Pi 재시작 복구, 중복 ACK 처리
+- 지그재그 좌표 순회와 v6 블리스터의 기존 경로 유지·초기화 후 전환
+- MOVE·DISPENSE·TIMEOUT·RESULT ACK의 INVALID_FORMAT 동일 프레임 재전송
 - 시스템 시간 미설정 시 스케줄러 차단
 - UART 부분 프레임 수신
 - 10번째 슬롯 소진과 초기화
@@ -918,7 +955,7 @@ sudo reboot
 | PI-16 | 결과 좌표 불일치 | 결과 무시, 오류 로그 |
 | PI-17 | UART 분리·복구 | DISCONNECTED 후 5초 재연결 |
 | PI-18 | 서비스 재시작 | DB 활성 상태와 요청번호 복구 |
-| PI-19 | 10개 슬롯 | 00부터 14까지 순서 보장 |
+| PI-19 | 10개 슬롯 | 00→01→02→03→04→14→13→12→11→10 순서 보장 |
 | PI-20 | 마지막 슬롯 | 소진 표시와 신규 MOVE 차단 |
 | PI-21 | 블리스터 초기화 | 미래 일정 유지, 좌표 00 |
 | PI-22 | 음성 반복 | 설정 횟수와 5초 간격 |
@@ -930,6 +967,10 @@ sudo reboot
 | PI-28 | 연속 R=2 후 R=1 | 매번 사용자 재배출, 최종 DISPENSED와 error_code 해제 |
 | PI-29 | 마지막 슬롯 R=2 | 교체 후 대형 수동복약·수동미복약 좌우 버튼 |
 | PI-30 | 마지막 빈 슬롯 선택 | 수동복약은 00→01 완료, 수동미복약은 00 MOVE, 만료 시 MISSED |
+| PI-31 | READY 허용시간 종료 | MISSED 기록, 같은 MOVE ID TIMEOUT, 좌표 유지 |
+| PI-32 | TIMEOUT ACK 유실·재시작 | 10초 재전송, 재시작 후 복구, ACK 전 신규 MOVE 차단 |
+| PI-33 | INVALID_FORMAT | 일정 실패 없이 같은 MOVE·DISPENSE·TIMEOUT·RESULT ACK 재전송 |
+| PI-34 | 마지막 성공 홈 복귀 | 좌표 10의 R=1 ACK 후 AT가 00으로 복귀하고 IDLE |
 
 ## 21. 현재 구현상 주의점과 보완 권고
 
@@ -945,6 +986,7 @@ sudo reboot
 | NOTE-08 | 터치 보정·fbdev 번호가 고정 | 장치 차이에서 좌표·화면 오류 | 실기기별 검증과 설치 후 진단 추가 |
 | NOTE-09 | 구형 UART 프레임을 임시 수용 | 요청번호 중복 방지 약화 | AT v2 완료 후 호환 경로 제거 |
 | NOTE-10 | 센서 성공은 복약 자체를 증명하지 않음 | 기록 해석 오해 가능 | UI와 보고서에서 배출 확인으로 표현 유지 |
+| NOTE-11 | TIMEOUT·지그재그·홈 복귀는 ATmega v1.3 구현이 필요 | 구형 AT와 좌표·상태 불일치 가능 | Pi와 AT 펌웨어를 같은 릴리스로 배포 |
 
 ## 22. 완전 동작 예시
 
@@ -1012,7 +1054,7 @@ Pi → AT: ACK|00000004|RESULT
 마지막 슬롯이 빈 경우:
 
 ```text
-AT → Pi: RESULT|00000002|142
+AT → Pi: RESULT|00000002|102
 Pi: EMPTY_BLISTER_SLOT 기록, blister_exhausted=1
 Pi → AT: ACK|00000002|RESULT
 LCD: 새 블리스터 교체·초기화 안내
@@ -1047,6 +1089,42 @@ Pi → AT: MOVE|00000001|0|0|003600
 → LCD 확인 대기
 ```
 
+### 22.5 READY 복약 허용시간 종료
+
+```text
+Pi → AT: MOVE|00000001|0|0|003600
+AT → Pi: ACK|00000001|MOVE
+AT → Pi: WAIT|00000001
+Pi: READY_TO_DISPENSE, 사용자 배출 대기
+
+예약 시각 + 허용시간 도달
+Pi: MISSED / DOSE_BUTTON_TIMEOUT와 TIMEOUT 대기 상태를 한 트랜잭션으로 저장
+Pi → AT: TIMEOUT|00000001
+AT: READY 해제, 좌표 00 유지
+AT → Pi: ACK|00000001|TIMEOUT
+Pi: timeout_ack_at 기록, 다음 신규 MOVE 허용
+
+ACK가 없으면 10초마다 같은 TIMEOUT 재전송
+Pi가 재시작돼도 DB에서 TIMEOUT 대기를 복구하여 같은 프레임 전송
+```
+
+### 22.6 INVALID_FORMAT과 마지막 홈 복귀
+
+```text
+# MOVE 프레임이 UART에서 깨진 경우
+Pi → AT: MOVE|00000001|0|4|003600
+AT → Pi: ERROR|INVALID_FORMAT
+Pi: 일정 MOVING 유지, COMM_ERROR로 종료하지 않음
+Pi → AT: MOVE|00000001|0|4|003600
+
+# 마지막 슬롯 10의 배출 성공
+AT → Pi: RESULT|0000000A|101
+Pi → AT: ACK|0000000A|RESULT
+AT: 물리 위치 10→00 자동 복귀
+AT: 복귀 완료 후 IDLE
+Pi DB: 논리 좌표 10, blister_exhausted=1 유지
+```
+
 ## 23. 구현 완료 판단 기준
 
 Raspberry Pi 측 구현은 다음 조건을 모두 만족할 때 통합 완료로 판단한다.
@@ -1056,10 +1134,13 @@ Raspberry Pi 측 구현은 다음 조건을 모두 만족할 때 통합 완료�
 3. 관리자 웹에서 예약·상태·시간 관리가 가능하다.
 4. LCD가 모든 상태와 오류를 실제 DB·UART 상태에 맞게 표시한다.
 5. UART v2 요청번호, 재전송, RESULT 중복 방지가 ATmega와 함께 동작한다.
-6. `R=0`은 자동 좌표 이동이나 자동 재배출을 일으키지 않는다.
-7. `R=1`, `R=2` 또는 수동 완료에서만 좌표가 정확히 한 칸 증가한다.
-8. `R=2`는 새 요청번호·남은 시간 MOVE와 사용자 재배출을 거쳐 같은 복약을 계속한다.
-9. 10번째 슬롯 이후 블리스터 소진이 유지된다.
-10. 음성, 볼륨, 시간, 전원 helper가 재부팅 후에도 의도대로 동작한다.
-11. 자동시험과 PI-01~PI-30 실기 통합시험 기록이 남는다.
-12. NOTE-01~NOTE-10의 처리 여부가 릴리스 기록에 명시된다.
+6. READY 허용시간 종료 시 TIMEOUT이 영속 재전송되고 ACK 후 다음 MOVE가 허용된다.
+7. `R=0`은 자동 좌표 이동이나 자동 재배출을 일으키지 않는다.
+8. `R=1`, `R=2` 또는 수동 완료에서만 좌표가 정확히 한 칸 증가한다.
+9. `R=2`는 새 요청번호·남은 시간 MOVE와 사용자 재배출을 거쳐 같은 복약을 계속한다.
+10. 10번째 슬롯 이후 블리스터 소진이 유지된다.
+11. 지그재그 순회와 마지막 성공 후 AT의 00 홈 복귀가 일치한다.
+12. INVALID_FORMAT은 동일 프레임을 재전송하고 다른 ERROR만 기존 실패 정책을 따른다.
+13. 음성, 볼륨, 시간, 전원 helper가 재부팅 후에도 의도대로 동작한다.
+14. 자동시험과 PI-01~PI-34 실기 통합시험 기록이 남는다.
+15. NOTE-01~NOTE-11의 처리 여부가 릴리스 기록에 명시된다.
