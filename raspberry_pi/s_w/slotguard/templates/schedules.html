@@ -12,12 +12,19 @@
     <main class="container">
         <h1>일정 관리</h1>
 
-        <a href="{{ url_for('dashboard') }}">
-            ← 대시보드
-        </a>
+        <div class="page-actions">
+            <a class="button" href="{{ url_for('dashboard') }}">
+                ← 대시보드
+            </a>
+        </div>
 
         <section class="panel">
             <h2>새 일정 등록</h2>
+
+            <p class="coordinate-notice">
+                다음 배출 좌표:
+                <strong>{{ current_coordinate }}</strong>
+            </p>
 
             {% if error %}
                 <p class="error">{{ error }}</p>
@@ -25,27 +32,10 @@
 
             <form method="post">
                 <label>
-                    포장 회차
-                    <input type="number"
-                           name="pack_id"
-                           min="1"
-                           value="1"
-                           required>
-                </label>
-
-                <label>
-                    슬롯 번호
-                    <input type="number"
-                           name="slot"
-                           min="1"
-                           max="10"
-                           required>
-                </label>
-
-                <label>
                     예정 날짜
                     <input type="date"
                            name="scheduled_date"
+                           value="{{ form_values.get('scheduled_date', '') }}"
                            required>
                 </label>
 
@@ -53,8 +43,39 @@
                     예정 시각
                     <input type="time"
                            name="scheduled_time"
+                           value="{{ form_values.get('scheduled_time', '') }}"
                            required>
                 </label>
+
+                <fieldset>
+                    <legend>미복용 허용시간 (선택)</legend>
+
+                    <div class="duration-grid">
+                        <label>
+                            시간
+                            <input type="number"
+                                   name="allowed_hours"
+                                   min="0"
+                                   max="{{ max_allowed_hours }}"
+                                   placeholder="1"
+                                   value="{{ form_values.get('allowed_hours', '') }}">
+                        </label>
+
+                        <label>
+                            분
+                            <input type="number"
+                                   name="allowed_minutes"
+                                   min="0"
+                                   max="59"
+                                   placeholder="0"
+                                   value="{{ form_values.get('allowed_minutes', '') }}">
+                        </label>
+                    </div>
+
+                    <small>
+                        비워두면 기본 1시간이 적용됩니다.
+                    </small>
+                </fieldset>
 
                 <button type="submit">
                     일정 저장
@@ -70,11 +91,12 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>회차</th>
-                            <th>슬롯</th>
                             <th>예정 시각</th>
+                            <th>허용시간</th>
+                            <th>배출 좌표</th>
                             <th>상태</th>
-                            <th>ATmega 전송</th>
+                            <th>압출기 응답</th>
+                            <th>삭제</th>
                         </tr>
                     </thead>
 
@@ -82,21 +104,47 @@
                         {% for schedule in schedules %}
                             <tr>
                                 <td>{{ schedule.id }}</td>
-                                <td>{{ schedule.pack_id }}</td>
-                                <td>{{ schedule.slot }}</td>
                                 <td>{{ schedule.scheduled_at }}</td>
+                                <td>
+                                    {{ schedule.allowed_seconds // 3600 }}시간
+                                    {{ (schedule.allowed_seconds % 3600) // 60 }}분
+                                </td>
+                                <td>
+                                    {% if schedule.x_coordinate is not none %}
+                                        {{ schedule.x_coordinate }}{{ schedule.y_coordinate }}
+                                    {% else %}
+                                        예약 대기
+                                    {% endif %}
+                                </td>
                                 <td>{{ schedule.status }}</td>
                                 <td>
                                     {% if schedule.synced %}
-                                        전송 완료
+                                        ACK 수신
+                                    {% elif schedule.command_sent_at %}
+                                        ACK 대기
                                     {% else %}
                                         미전송
                                     {% endif %}
                                 </td>
+                                <td>
+                                    <form class="inline-form"
+                                          method="post"
+                                          action="{{ url_for(
+                                              'delete_schedule_item',
+                                              schedule_id=schedule.id
+                                          ) }}"
+                                          onsubmit="return confirm('이 일정을 삭제하시겠습니까?');">
+                                        <button class="danger-button compact-button"
+                                                type="submit"
+                                                aria-label="일정 {{ schedule.id }} 삭제">
+                                            삭제
+                                        </button>
+                                    </form>
+                                </td>
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="6">
+                                <td colspan="7">
                                     등록된 일정이 없습니다.
                                 </td>
                             </tr>

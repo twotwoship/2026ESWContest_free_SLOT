@@ -21,6 +21,66 @@ body {
     background: #fff7df;
 }
 
+.time-panel {
+    margin: 20px 0;
+    padding: 18px;
+    border: 2px solid;
+    border-radius: 10px;
+    background: white;
+}
+
+.time-panel h2 {
+    margin-top: 0;
+}
+
+.time-panel.time-required {
+    border-color: #dc2626;
+    background: #fff7f7;
+}
+
+.time-panel.time-ready {
+    border-color: #16a34a;
+    background: #f4fff6;
+}
+
+.time-summary {
+    display: grid;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.time-summary div {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) 2fr;
+    gap: 10px;
+}
+
+.time-summary dt {
+    font-weight: bold;
+}
+
+.time-summary dd {
+    margin: 0;
+}
+
+.time-setting-message {
+    min-height: 1.5em;
+    margin-bottom: 0;
+}
+
+.time-setting-message.success {
+    color: #15803d;
+}
+
+.time-setting-message.failure {
+    color: #b91c1c;
+}
+
+button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
 .status-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -57,6 +117,19 @@ body {
     border-top: 5px solid #dc2626;
 }
 
+.status-card.coordinate {
+    border-top: 5px solid #7c3aed;
+}
+
+.status-card.uart {
+    border-top: 5px solid #0891b2;
+}
+
+.status-card .device-status {
+    overflow-wrap: anywhere;
+    font-size: 18px;
+}
+
 .button,
 button {
     display: inline-block;
@@ -67,6 +140,30 @@ button {
     color: white;
     text-decoration: none;
     cursor: pointer;
+}
+
+.page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.page-actions .button,
+.page-actions button {
+    min-height: 44px;
+}
+
+.inline-form {
+    display: inline-block;
+}
+
+.danger-button {
+    background: #dc2626;
+}
+
+.compact-button {
+    padding: 8px 12px;
 }
 
 .panel {
@@ -85,6 +182,37 @@ label {
     display: grid;
     gap: 6px;
     font-weight: bold;
+}
+
+fieldset {
+    margin: 0;
+    padding: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+}
+
+legend {
+    padding: 0 6px;
+    font-weight: bold;
+}
+
+.duration-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+small {
+    display: block;
+    margin-top: 10px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.coordinate-notice {
+    padding: 12px;
+    border-radius: 8px;
+    background: #ede9fe;
 }
 
 input {
@@ -116,4 +244,21 @@ td {
     border-bottom: 1px solid #ddd;
     text-align: left;
     white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+    .time-summary div {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .page-actions > * {
+        width: 100%;
+    }
+
+    .page-actions .button,
+    .page-actions button {
+        width: 100%;
+        text-align: center;
+    }
 }

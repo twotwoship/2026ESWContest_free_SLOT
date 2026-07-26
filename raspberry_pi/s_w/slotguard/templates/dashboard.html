@@ -17,6 +17,55 @@
             정제의 배출구 통과 여부를 기록합니다.
         </p>
 
+        <section class="time-panel
+                        {% if system_time_status.configured %}
+                            time-ready
+                        {% else %}
+                            time-required
+                        {% endif %}">
+            <h2>장치 시간 설정</h2>
+
+            {% if system_time_status.configured %}
+                <p>
+                    이 부팅에서 장치 시간이 설정되었습니다.
+                    예약 및 UART 전송이 활성화되어 있습니다.
+                </p>
+            {% else %}
+                <p>
+                    Pi가 재부팅되어 현재 시간이 확인되지 않았습니다.
+                    시간을 설정하기 전에는 예약 및 UART 전송이
+                    안전을 위해 중지됩니다.
+                </p>
+            {% endif %}
+
+            <dl class="time-summary">
+                <div>
+                    <dt>현재 Pi 표시 시간</dt>
+                    <dd>{{ system_time_status.device_time }}</dd>
+                </div>
+                <div>
+                    <dt>스마트폰 시간</dt>
+                    <dd id="phone-time">확인 중...</dd>
+                </div>
+                <div>
+                    <dt>장치 시간대</dt>
+                    <dd>{{ system_time_status.device_timezone }}</dd>
+                </div>
+            </dl>
+
+            <button id="set-system-time" type="button">
+                {% if system_time_status.configured %}
+                    스마트폰 시간으로 다시 설정
+                {% else %}
+                    스마트폰 시간으로 장치 시간 설정
+                {% endif %}
+            </button>
+
+            <p id="time-setting-message"
+               class="time-setting-message"
+               role="status"></p>
+        </section>
+
         <section class="status-grid">
             <div class="status-card">
                 <strong>{{ counts.total }}</strong>
@@ -42,11 +91,116 @@
                 <strong>{{ counts.missed }}</strong>
                 <span>미배출</span>
             </div>
+
+            <div class="status-card coordinate">
+                <strong>{{ current_coordinate }}</strong>
+                <span>다음 배출 좌표</span>
+            </div>
+
+            <div class="status-card uart">
+                <strong class="device-status">
+                    {% if uart_status == "CONNECTED" %}
+                        이상없음
+                    {% else %}
+                        연결 확인 필요
+                    {% endif %}
+                </strong>
+                <span>압출기 연결상태</span>
+            </div>
         </section>
 
-        <a class="button" href="{{ url_for('schedule_page') }}">
-            일정 등록 및 조회
-        </a>
+        <div class="page-actions">
+            <a class="button" href="{{ url_for('schedule_page') }}">
+                일정 등록 및 조회
+            </a>
+
+            <form class="inline-form"
+                  method="post"
+                  action="{{ url_for('reset_schedules') }}"
+                  onsubmit="return confirm('모든 일정을 초기화하겠습니까?');">
+                <button class="danger-button" type="submit">
+                    일정 초기화
+                </button>
+            </form>
+        </div>
     </main>
+
+    <script>
+        const phoneTime = document.getElementById("phone-time");
+        const setTimeButton = document.getElementById("set-system-time");
+        const settingMessage = document.getElementById(
+            "time-setting-message"
+        );
+
+        function formatPhoneTime() {
+            phoneTime.textContent = new Date().toLocaleString(
+                "ko-KR",
+                {
+                    hour12: false,
+                    timeZoneName: "short"
+                }
+            );
+        }
+
+        formatPhoneTime();
+        window.setInterval(formatPhoneTime, 1000);
+
+        setTimeButton.addEventListener("click", async () => {
+            const now = new Date();
+            const timezone = (
+                Intl.DateTimeFormat().resolvedOptions().timeZone
+                || "Asia/Seoul"
+            );
+            const confirmation = [
+                "다음 스마트폰 시간으로 Pi 장치 시간을 설정하시겠습니까?",
+                "",
+                now.toLocaleString("ko-KR", { hour12: false }),
+                `시간대: ${timezone}`
+            ].join("\n");
+
+            if (!window.confirm(confirmation)) {
+                return;
+            }
+
+            setTimeButton.disabled = true;
+            settingMessage.className = "time-setting-message";
+            settingMessage.textContent = "장치 시간을 설정하고 있습니다...";
+
+            try {
+                const response = await fetch(
+                    "{{ url_for('api_set_system_time') }}",
+                    {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            timestamp_ms: Date.now(),
+                            timezone
+                        })
+                    }
+                );
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        result.message || "시간 설정에 실패했습니다."
+                    );
+                }
+
+                settingMessage.classList.add("success");
+                settingMessage.textContent = (
+                    `장치 시간이 ${result.device_time}로 설정되었습니다.`
+                );
+                window.setTimeout(() => window.location.reload(), 800);
+
+            } catch (error) {
+                settingMessage.classList.add("failure");
+                settingMessage.textContent = error.message;
+                setTimeButton.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>
