@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="theme-color" content="#07111f">
+    <title>약SLOT-GUARD</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='display.css', v=app_version) }}">
+</head>
+<body class="lcd-body">
+    <div id="lcd-app" class="lcd-app" aria-live="polite">
+        <header class="lcd-header">
+            <div class="lcd-brand">약SLOT-GUARD</div>
+            <button id="header-volume-test" type="button"
+                    class="lcd-header-volume-test">볼륨 테스트</button>
+            <div id="header-device" class="lcd-device-state">확인 중</div>
+            <time id="header-time" class="lcd-clock">--:--</time>
+        </header>
+
+        <main id="lcd-screen" class="lcd-screen">
+            <section class="lcd-loading">
+                <div class="lcd-spinner" aria-hidden="true"></div>
+                <strong>장치를 확인하고 있습니다</strong>
+            </section>
+        </main>
+
+        <nav id="lcd-nav" class="lcd-nav" aria-label="주요 화면">
+            <button type="button" data-view="home">홈</button>
+            <button type="button" data-view="device">장치 상태</button>
+            <button type="button" data-view="settings">환경 설정</button>
+        </nav>
+
+        <div id="lcd-toast" class="lcd-toast" role="alert" hidden></div>
+
+        <div id="lcd-confirm" class="lcd-modal" hidden>
+            <div class="lcd-modal-box" role="dialog" aria-modal="true"
+                 aria-labelledby="confirm-title">
+                <strong id="confirm-title"></strong>
+                <p id="confirm-message"></p>
+                <div class="lcd-modal-actions">
+                    <button id="confirm-cancel" type="button" class="lcd-secondary">
+                        취소
+                    </button>
+                    <button id="confirm-hold" type="button" class="lcd-danger">
+                        2초간 눌러 실행
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.SLOTGUARD_VERSION = {{ app_version|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='display.js', v=app_version) }}"></script>
+</body>
+</html>

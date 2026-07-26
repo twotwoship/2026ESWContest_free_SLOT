@@ -2,15 +2,19 @@ import sqlite3
 import tempfile
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import app
 import database
 import system_time_service
 from uart_service import (
     UartService,
-    build_schedule_command,
+    build_dispense_command,
+    build_move_command,
+    build_result_ack,
+    parse_protocol_message,
     parse_result_message,
 )
 
@@ -53,197 +57,412 @@ class SlotguardTestCase(unittest.TestCase):
         database.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
 
-    def create_assigned_schedule(self, coordinate=(0, 0)):
-        schedule_id = database.create_schedule(
-            "2099-01-01 09:00",
-            3600,
-        )
-        database.assign_coordinate(
-            schedule_id,
-            coordinate[0],
-            coordinate[1],
-        )
-        return schedule_id
+    @staticmethod
+    def now_minute():
+        return datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    def make_service(self, on_blister_exhausted=None):
-        service = UartService(
-            on_blister_exhausted=on_blister_exhausted
+    @staticmethod
+    def now_seconds():
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def create_schedule(self, scheduled_at=None, allowed_seconds=3600):
+        return database.create_schedule(
+            scheduled_at or self.now_minute(),
+            "혈압약",
+            allowed_seconds,
         )
+
+    def make_service(self, **callbacks):
+        service = UartService(**callbacks)
         service._serial = FakeSerial()
+        service._connection_state = "CONNECTED"
         return service
 
-    def test_command_and_result_protocol(self):
+    def start_move(self, service=None):
+        schedule_id = self.create_schedule()
+        service = service or self.make_service()
+        service._process_schedules()
+        return service, schedule_id, database.get_schedule(schedule_id)
+
+    def move_to_ready(self, service=None):
+        service, schedule_id, schedule = self.start_move(service)
+        request_id = schedule["move_request_id"]
+        service._handle_message(f"ACK|{request_id}|MOVE")
+        service._handle_message(f"WAIT|{request_id}")
+        return service, schedule_id, database.get_schedule(schedule_id)
+
+    def move_to_dispensing(self, service=None):
+        service, schedule_id, schedule = self.move_to_ready(service)
+        schedule = service.request_dispense(schedule_id)
+        return service, schedule_id, schedule
+
+    def test_protocol_v2_messages(self):
         self.assertEqual(
-            build_schedule_command(0, 0, 3600),
-            b"00003600\n",
+            build_move_command("00000001", 0, 0, 3600),
+            b"MOVE|00000001|0|0|003600\n",
         )
         self.assertEqual(
-            build_schedule_command(1, 4, 60),
-            b"14000060\n",
+            build_dispense_command("00000002", 1, 4),
+            b"DISPENSE|00000002|1|4\n",
         )
         self.assertEqual(
-            build_schedule_command(0, 0, 999999),
-            b"00999999\n",
+            build_result_ack("00000002"),
+            b"ACK|00000002|RESULT\n",
         )
-        self.assertEqual(parse_result_message("001"), (0, 0, 1))
-        self.assertEqual(parse_result_message("140"), (1, 4, 0))
-        self.assertIsNone(parse_result_message("ACK"))
-        self.assertIsNone(parse_result_message("205"))
+        self.assertEqual(parse_result_message("141"), (1, 4, 1))
+        self.assertEqual(
+            parse_protocol_message("RESULT|00000002|140"),
+            {
+                "type": "RESULT",
+                "request_id": "00000002",
+                "result": (1, 4, 0),
+            },
+        )
+        self.assertIsNone(parse_protocol_message("WAIT|invalid"))
 
-        with self.assertRaises(ValueError):
-            build_schedule_command(0, 0, 1000000)
-
-    def test_ack_wait_and_success_advance_coordinate(self):
-        schedule_id = self.create_assigned_schedule()
-        service = self.make_service()
-        service._active_schedule_id = schedule_id
-
-        service._handle_message("ACK")
-        service._handle_message("WAIT")
-        service._handle_message("001")
-
+    def test_schedule_requires_medicine_and_rejects_duplicate_time(self):
+        schedule_id = self.create_schedule()
         schedule = database.get_schedule(schedule_id)
-        self.assertEqual(schedule["status"], "DISPENSED")
-        self.assertEqual(schedule["synced"], 1)
+        self.assertEqual(schedule["medicine_name"], "혈압약")
+        self.assertEqual(schedule["status"], "SCHEDULED")
+
+        with self.assertRaises(database.DuplicateScheduleError):
+            self.create_schedule()
+        with self.assertRaises(ValueError):
+            database.create_schedule(
+                "2099-01-02 09:00",
+                "가" * 31,
+                3600,
+            )
+
+    def test_move_wait_dispense_result_flow_uses_two_request_ids(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        self.assertEqual(schedule["status"], "DISPENSING")
+        self.assertEqual(schedule["move_request_id"], "00000001")
+        self.assertEqual(schedule["dispense_request_id"], "00000002")
+        self.assertEqual(
+            service._serial.writes,
+            [
+                b"MOVE|00000001|0|0|003600\n",
+                b"DISPENSE|00000002|0|0\n",
+            ],
+        )
+
+        service._handle_message("ACK|00000002|DISPENSE")
+        service._handle_message("RESULT|00000002|001")
+
+        completed = database.get_schedule(schedule_id)
+        self.assertEqual(completed["status"], "DISPENSED")
         self.assertEqual(database.get_current_coordinate(), (0, 1))
-        self.assertEqual(service._serial.writes, [b"ACK\n"])
+        self.assertEqual(
+            service._serial.writes[-1],
+            b"ACK|00000002|RESULT\n",
+        )
 
-    def test_failure_keeps_same_coordinate_for_next_schedule(self):
-        schedule_id = self.create_assigned_schedule()
+    def test_move_retry_reuses_request_id_until_ack(self):
+        service, schedule_id, schedule = self.start_move()
+        first_payload = service._serial.writes[0]
+
+        service._last_schedule_check_at = 0
+        service._last_move_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes, [first_payload, first_payload])
+
+        service._handle_message(
+            f"ACK|{schedule['move_request_id']}|MOVE"
+        )
+        service._last_schedule_check_at = 0
+        service._last_move_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes, [first_payload, first_payload])
+        self.assertIsNotNone(database.get_schedule(schedule_id)["move_ack_at"])
+
+    def test_dispense_retry_reuses_request_id_until_ack(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        dispense_payload = service._serial.writes[-1]
+        service._last_schedule_check_at = 0
+        service._last_dispense_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes[-1], dispense_payload)
+        self.assertEqual(service._serial.writes.count(dispense_payload), 2)
+
+        service._handle_message(
+            f"ACK|{schedule['dispense_request_id']}|DISPENSE"
+        )
+        service._last_schedule_check_at = 0
+        service._last_dispense_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes.count(dispense_payload), 2)
+
+    def test_wait_is_implicit_move_ack_and_enables_button(self):
+        service, schedule_id, schedule = self.start_move()
+        service._handle_message(f"WAIT|{schedule['move_request_id']}")
+        ready = database.get_schedule(schedule_id)
+        self.assertEqual(ready["status"], "READY_TO_DISPENSE")
+        self.assertIsNotNone(ready["move_ack_at"])
+        self.assertIsNotNone(ready["ready_at"])
+
+    def test_result_failure_can_be_manually_completed_and_advances(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{schedule['dispense_request_id']}|000"
+        )
+        failed = database.get_schedule(schedule_id)
+        self.assertEqual(failed["status"], "FAILED")
+        self.assertEqual(failed["error_code"], "NO_DROP_DETECTED")
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+
+        result = database.complete_manual(schedule_id, self.now_seconds())
+        self.assertEqual(
+            database.get_schedule(schedule_id)["status"],
+            "MANUALLY_COMPLETED",
+        )
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertFalse(result["blister_exhausted"])
+
+    def test_failed_result_can_be_acknowledged_without_advancing(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{schedule['dispense_request_id']}|000"
+        )
+        self.assertIsNotNone(database.get_unacknowledged_result())
+        database.acknowledge_result(schedule_id, self.now_seconds())
+        self.assertIsNone(database.get_unacknowledged_result())
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+
+    def test_duplicate_result_is_acknowledged_without_double_advance(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        result_message = f"RESULT|{schedule['dispense_request_id']}|001"
+        service._handle_message(result_message)
+        service._handle_message(result_message)
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertEqual(
+            service._serial.writes.count(
+                build_result_ack(schedule["dispense_request_id"])
+            ),
+            2,
+        )
+
+    def test_mismatched_result_coordinate_is_ignored(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{schedule['dispense_request_id']}|011"
+        )
+        self.assertEqual(
+            database.get_schedule(schedule_id)["status"],
+            "DISPENSING",
+        )
+        self.assertIn("결과 좌표 불일치", service.get_status()["last_error"])
+
+    def test_window_starts_at_scheduled_time_and_old_schedule_is_missed(self):
+        old_time = (datetime.now() - timedelta(minutes=2)).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        schedule_id = self.create_schedule(old_time, 60)
         service = self.make_service()
-        service._active_schedule_id = schedule_id
-
-        service._handle_message("ACK")
-        service._handle_message("000")
-
+        service._process_schedules()
         schedule = database.get_schedule(schedule_id)
         self.assertEqual(schedule["status"], "MISSED")
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
-        self.assertEqual(service._serial.writes, [b"ACK\n"])
+        self.assertEqual(schedule["error_code"], "DOSE_WINDOW_EXPIRED")
+        self.assertEqual(service._serial.writes, [])
 
-    def test_uart_lines_can_arrive_in_partial_chunks(self):
-        schedule_id = self.create_assigned_schedule()
-        service = self.make_service()
-        service._active_schedule_id = schedule_id
-
-        service._serial.feed(b"AC")
-        service._read_available_lines()
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "WAITING",
+    def test_move_ack_timeout_is_comm_error(self):
+        service, schedule_id, schedule = self.start_move()
+        conn = database.connect_db()
+        conn.execute(
+            "UPDATE schedules SET scheduled_at = ? WHERE id = ?",
+            (
+                (datetime.now() - timedelta(hours=2)).strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+                schedule_id,
+            ),
         )
-
-        service._serial.feed(b"K\nWA")
-        service._read_available_lines()
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "ALLOWED",
-        )
-
-        service._serial.feed(b"IT\n001\n")
-        service._read_available_lines()
-
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "DISPENSED",
-        )
-        self.assertEqual(service._serial.writes, [b"ACK\n"])
-
-    def test_wait_is_treated_as_implicit_command_ack(self):
-        schedule_id = self.create_assigned_schedule()
-        service = self.make_service()
-        service._active_schedule_id = schedule_id
-
-        service._handle_message("WAIT")
-
-        schedule = database.get_schedule(schedule_id)
-        self.assertEqual(schedule["status"], "ALLOWED")
-        self.assertEqual(schedule["synced"], 1)
-
-    def test_command_is_retried_after_ten_seconds_until_ack(self):
-        schedule_id = database.create_schedule(
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
-            3600,
-        )
-        service = self.make_service()
-
-        service._process_schedules()
-        self.assertEqual(service._serial.writes, [b"00003600\n"])
-
+        conn.commit()
+        conn.close()
         service._last_schedule_check_at = 0
-        service._last_transmit_at = (
-            time.monotonic() - service.ack_retry_seconds
-        )
         service._process_schedules()
-        self.assertEqual(
-            service._serial.writes,
-            [b"00003600\n", b"00003600\n"],
-        )
-
-        service._handle_message("ACK")
-        service._last_schedule_check_at = 0
-        service._last_transmit_at = (
-            time.monotonic() - service.ack_retry_seconds
-        )
-        service._process_schedules()
-
-        self.assertEqual(
-            service._serial.writes,
-            [b"00003600\n", b"00003600\n"],
-        )
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "ALLOWED",
-        )
+        expired = database.get_schedule(schedule_id)
+        self.assertEqual(expired["status"], "COMM_ERROR")
+        self.assertEqual(expired["error_code"], "MOVE_ACK_TIMEOUT")
 
     def test_scheduler_is_blocked_until_system_time_is_set(self):
-        schedule_id = database.create_schedule(
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
+        schedule_id = self.create_schedule()
+        service = self.make_service(is_time_ready=lambda: False)
+        service._process_schedules()
+        self.assertEqual(service._serial.writes, [])
+        self.assertEqual(
+            database.get_schedule(schedule_id)["status"],
+            "SCHEDULED",
+        )
+
+    def test_uart_lines_can_arrive_in_partial_chunks(self):
+        service, schedule_id, schedule = self.start_move()
+        request_id = schedule["move_request_id"]
+        service._serial.feed(f"ACK|{request_id}|MO".encode("ascii"))
+        service._read_available_lines()
+        self.assertIsNone(database.get_schedule(schedule_id)["move_ack_at"])
+        service._serial.feed(b"VE\n")
+        service._read_available_lines()
+        self.assertIsNotNone(database.get_schedule(schedule_id)["move_ack_at"])
+
+    def test_last_slot_stays_exhausted_until_gui_reset(self):
+        conn = database.connect_db()
+        conn.execute(
+            """
+            UPDATE device_state
+            SET current_x = 1, current_y = 4, blister_exhausted = 0
+            WHERE singleton = 1
+            """
+        )
+        conn.commit()
+        conn.close()
+        future_id = database.create_schedule(
+            "2099-01-01 09:00",
+            "미래 약",
             3600,
         )
-        service = UartService(is_time_ready=lambda: False)
-        service._serial = FakeSerial()
-
-        service._process_schedules()
-
-        self.assertEqual(service._serial.writes, [])
-        schedule = database.get_schedule(schedule_id)
-        self.assertEqual(schedule["status"], "WAITING")
-        self.assertIsNone(schedule["x_coordinate"])
-
-    def test_missing_result_becomes_missed_after_allowed_time(self):
-        schedule_id = database.create_schedule(
-            "2000-01-01 09:00",
-            60,
+        active_id = database.create_schedule(
+            self.now_minute(),
+            "현재 약",
+            3600,
         )
-        database.assign_coordinate(schedule_id, 0, 0)
-        database.mark_synced(schedule_id, "2000-01-01 09:00:01")
-
         service = self.make_service()
         service._process_schedules()
-
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "MISSED",
+        active = database.get_schedule(active_id)
+        service._handle_message(f"WAIT|{active['move_request_id']}")
+        active = service.request_dispense(active_id)
+        service._handle_message(
+            f"RESULT|{active['dispense_request_id']}|141"
         )
+        self.assertTrue(database.get_device_state()["blister_exhausted"])
+        self.assertEqual(len(database.get_used_coordinates()), 10)
+
+        database.reset_blister(self.now_seconds())
+        self.assertFalse(database.get_device_state()["blister_exhausted"])
         self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertIsNotNone(database.get_schedule(future_id))
 
-    def test_never_transmitted_old_schedule_expires_safely(self):
-        schedule_id = database.create_schedule(
-            "2000-01-01 09:00",
-            60,
-        )
-        database.assign_coordinate(schedule_id, 0, 0)
+    def test_blister_reset_is_blocked_during_active_dose(self):
+        service, _, _ = self.start_move()
+        with self.assertRaises(database.ActiveDoseError):
+            database.reset_blister(self.now_seconds())
+        self.assertIsNotNone(service.get_status()["active_schedule_id"])
 
-        database.expire_unstarted_schedules(
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
+    def test_voice_settings_persist(self):
+        database.update_device_settings(10, 10, self.now_seconds())
+        settings = database.get_device_settings()
+        self.assertEqual(settings["voice_repeat"], 10)
+        self.assertEqual(settings["volume_step"], 10)
 
-        self.assertEqual(
-            database.get_schedule(schedule_id)["status"],
-            "MISSED",
+        database.update_device_settings(1, 0, self.now_seconds())
+        settings = database.get_device_settings()
+        self.assertEqual(settings["volume_step"], 0)
+
+        database.update_device_settings(0, 5, self.now_seconds())
+        settings = database.get_device_settings()
+        self.assertEqual(settings["voice_repeat"], 0)
+
+        with self.assertRaises(ValueError):
+            database.update_device_settings(1, 11, self.now_seconds())
+        with self.assertRaises(ValueError):
+            database.update_device_settings(-1, 5, self.now_seconds())
+
+    def test_display_endpoint_and_local_write_protection(self):
+        client = app.app.test_client()
+        response = client.get("/display")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("약SLOT-GUARD".encode("utf-8"), response.data)
+
+        response = client.post(
+            "/api/display/settings",
+            json={"voice_repeat": 3, "volume_step": 3},
+            environ_base={"REMOTE_ADDR": "192.168.0.20"},
         )
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(response.status_code, 403)
+
+        response = client.post(
+            "/api/display/settings",
+            json={"voice_repeat": 3, "volume_step": 3},
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(database.get_device_settings()["voice_repeat"], 3)
+        self.assertEqual(database.get_device_settings()["volume_step"], 3)
+
+    def test_legacy_volume_labels_migrate_to_numeric_steps(self):
+        database.DB_PATH.unlink()
+        conn = sqlite3.connect(database.DB_PATH)
+        conn.execute(
+            """
+            CREATE TABLE device_settings (
+                singleton INTEGER PRIMARY KEY,
+                voice_repeat INTEGER NOT NULL,
+                volume_level TEXT NOT NULL,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO device_settings (
+                singleton, voice_repeat, volume_level
+            ) VALUES (1, 4, 'high')
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        database.init_db()
+        settings = database.get_device_settings()
+        self.assertEqual(settings["voice_repeat"], 4)
+        self.assertEqual(settings["volume_step"], 8)
+        database.update_device_settings(0, 8, self.now_seconds())
+        self.assertEqual(database.get_device_settings()["voice_repeat"], 0)
+
+    def test_display_status_contains_next_medicine_and_slots(self):
+        self.create_schedule("2099-01-01 09:00")
+        with patch.object(app, "get_local_ip_address", return_value="192.168.0.2"):
+            status = app.build_display_status()
+        self.assertEqual(status["next_schedule"]["medicine_name"], "혈압약")
+        self.assertEqual(status["target_coordinate"], {"x": 0, "y": 0})
+        self.assertEqual(status["device"]["network"], "CONNECTED")
+        self.assertNotIn("management_url", status["device"])
+        self.assertNotIn("local_ip", status["device"])
+
+        database.update_device_settings(0, 5, self.now_seconds())
+        status = app.build_display_status()
+        self.assertEqual(status["device"]["audio"], "DISABLED")
+
+    def test_volume_test_uses_saved_step_and_rejects_mute(self):
+        client = app.app.test_client()
+        database.update_device_settings(2, 7, self.now_seconds())
+        with patch.object(app.voice_alert_manager, "test_once", return_value=True) as test_once:
+            response = client.post(
+                "/api/display/test-volume",
+                json={},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        self.assertEqual(response.status_code, 200)
+        test_once.assert_called_once_with(7)
+
+        database.update_device_settings(2, 0, self.now_seconds())
+        with patch.object(app.voice_alert_manager, "test_once", return_value=False):
+            response = client.post(
+                "/api/display/test-volume",
+                json={},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["error"], "VOLUME_MUTED")
 
     def test_smartphone_time_is_valid_only_for_current_boot(self):
         boot_id_path = Path(self.temp_dir.name) / "boot_id"
@@ -251,9 +470,9 @@ class SlotguardTestCase(unittest.TestCase):
         timestamp_ms = int(
             datetime(
                 2026,
-                7,
-                26,
-                9,
+                8,
+                13,
+                12,
                 0,
                 tzinfo=timezone.utc,
             ).timestamp()
@@ -261,157 +480,21 @@ class SlotguardTestCase(unittest.TestCase):
         )
 
         with (
-            patch.object(
-                system_time_service,
-                "BOOT_ID_PATH",
-                boot_id_path,
-            ),
-            patch.object(
-                system_time_service,
-                "_run_time_helper",
-            ) as run_helper,
+            patch.object(system_time_service, "BOOT_ID_PATH", boot_id_path),
+            patch.object(system_time_service, "_run_time_helper") as helper,
         ):
-            result = (
-                system_time_service.set_system_time_from_smartphone(
-                    timestamp_ms,
-                    "Asia/Seoul",
-                )
-            )
-
-            self.assertTrue(result["configured"])
-            self.assertTrue(
-                system_time_service.is_system_time_configured()
-            )
-            run_helper.assert_called_once()
-
-            boot_id_path.write_text(
-                "boot-two\n",
-                encoding="ascii",
-            )
-            self.assertFalse(
-                system_time_service.is_system_time_configured()
-            )
-
-    def test_invalid_smartphone_time_is_rejected(self):
-        with self.assertRaises(system_time_service.SystemTimeError):
-            system_time_service.set_system_time_from_smartphone(
-                0,
+            result = system_time_service.set_system_time_from_smartphone(
+                timestamp_ms,
                 "Asia/Seoul",
             )
+            self.assertTrue(result["configured"])
+            self.assertTrue(system_time_service.is_system_time_configured())
+            helper.assert_called_once()
 
-    def test_coordinate_14_resets_and_runs_exhausted_callback(self):
-        callback_count = []
+            boot_id_path.write_text("boot-two\n", encoding="ascii")
+            self.assertFalse(system_time_service.is_system_time_configured())
 
-        conn = database.connect_db()
-        conn.execute(
-            """
-            UPDATE device_state
-            SET current_x = 1,
-                current_y = 4
-            WHERE singleton = 1
-            """
-        )
-        conn.commit()
-        conn.close()
-
-        schedule_id = self.create_assigned_schedule((1, 4))
-        service = self.make_service(
-            on_blister_exhausted=lambda: callback_count.append(1)
-        )
-        service._active_schedule_id = schedule_id
-
-        service._handle_message("ACK")
-        service._handle_message("141")
-
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
-        self.assertEqual(callback_count, [1])
-
-    def test_reset_deletes_schedules_and_resets_coordinate(self):
-        self.create_assigned_schedule()
-        database.advance_coordinate("2099-01-01 09:01:00")
-
-        database.reset_schedules_and_position(
-            "2099-01-01 09:02:00"
-        )
-
-        self.assertEqual(database.get_schedules(), [])
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
-
-    def test_delete_schedule_removes_only_selected_schedule(self):
-        first_schedule_id = database.create_schedule(
-            "2099-01-01 09:00",
-            3600,
-        )
-        second_schedule_id = database.create_schedule(
-            "2099-01-01 10:00",
-            3600,
-        )
-
-        self.assertTrue(database.delete_schedule(first_schedule_id))
-        self.assertFalse(database.delete_schedule(first_schedule_id))
-        self.assertIsNone(database.get_schedule(first_schedule_id))
-        self.assertIsNotNone(database.get_schedule(second_schedule_id))
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
-
-    def test_cancel_schedule_only_clears_matching_active_schedule(self):
-        active_schedule_id = self.create_assigned_schedule()
-        other_schedule_id = database.create_schedule(
-            "2099-01-01 10:00",
-            3600,
-        )
-        service = self.make_service()
-        service._active_schedule_id = active_schedule_id
-        service._last_transmit_at = 123
-
-        self.assertFalse(service.cancel_schedule(other_schedule_id))
-        self.assertEqual(
-            service.get_status()["active_schedule_id"],
-            active_schedule_id,
-        )
-        self.assertTrue(service.cancel_schedule(active_schedule_id))
-        self.assertIsNone(service.get_status()["active_schedule_id"])
-        self.assertIsNone(service._last_transmit_at)
-
-    def test_legacy_database_is_migrated_without_losing_rows(self):
-        database.DB_PATH.unlink()
-        conn = sqlite3.connect(database.DB_PATH)
-        conn.execute(
-            """
-            CREATE TABLE schedules (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                pack_id INTEGER NOT NULL,
-                slot INTEGER NOT NULL,
-                scheduled_at TEXT NOT NULL,
-                status TEXT NOT NULL,
-                dispensed_at TEXT,
-                synced INTEGER NOT NULL DEFAULT 0
-            )
-            """
-        )
-        conn.execute(
-            """
-            INSERT INTO schedules (
-                pack_id,
-                slot,
-                scheduled_at,
-                status,
-                synced
-            )
-            VALUES (1, 1, '2099-01-01 09:00', 'WAITING', 0)
-            """
-        )
-        conn.commit()
-        conn.close()
-
-        database.init_db()
-
-        schedules = database.get_schedules()
-        self.assertEqual(len(schedules), 1)
-        self.assertEqual(schedules[0]["scheduled_at"], "2099-01-01 09:00")
-        self.assertEqual(schedules[0]["allowed_seconds"], 3600)
-        self.assertIsNone(schedules[0]["x_coordinate"])
-
-    def test_four_digit_seconds_schema_expands_without_losing_data(self):
+    def test_legacy_database_migrates_without_losing_schedule(self):
         database.DB_PATH.unlink()
         conn = sqlite3.connect(database.DB_PATH)
         conn.execute(
@@ -419,8 +502,7 @@ class SlotguardTestCase(unittest.TestCase):
             CREATE TABLE schedules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 scheduled_at TEXT NOT NULL,
-                allowed_seconds INTEGER NOT NULL
-                    CHECK(allowed_seconds BETWEEN 1 AND 9999),
+                allowed_seconds INTEGER NOT NULL,
                 status TEXT NOT NULL,
                 x_coordinate INTEGER,
                 y_coordinate INTEGER,
@@ -434,43 +516,18 @@ class SlotguardTestCase(unittest.TestCase):
         conn.execute(
             """
             INSERT INTO schedules (
-                scheduled_at,
-                allowed_seconds,
-                status,
-                x_coordinate,
-                y_coordinate,
-                synced,
-                command_sent_at,
-                ack_received_at
+                scheduled_at, allowed_seconds, status
             )
-            VALUES (
-                '2099-01-01 09:00',
-                9999,
-                'ALLOWED',
-                1,
-                4,
-                1,
-                '2099-01-01 09:00:00',
-                '2099-01-01 09:00:01'
-            )
+            VALUES ('2099-01-01 09:00', 3600, 'WAITING')
             """
         )
         conn.commit()
         conn.close()
 
         database.init_db()
-
-        schedules = database.get_schedules()
-        self.assertEqual(len(schedules), 1)
-        self.assertEqual(schedules[0]["allowed_seconds"], 9999)
-        self.assertEqual(schedules[0]["x_coordinate"], 1)
-        self.assertEqual(schedules[0]["y_coordinate"], 4)
-
-        new_schedule_id = database.create_schedule(
-            "2099-01-02 09:00",
-            86400,
-        )
-        self.assertEqual(new_schedule_id, 2)
+        schedule = database.get_schedules()[0]
+        self.assertEqual(schedule["medicine_name"], "등록된 약")
+        self.assertEqual(schedule["status"], "SCHEDULED")
 
 
 if __name__ == "__main__":

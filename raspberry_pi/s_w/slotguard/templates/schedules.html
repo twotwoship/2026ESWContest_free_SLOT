@@ -32,6 +32,16 @@
 
             <form method="post">
                 <label>
+                    약 이름
+                    <input type="text"
+                           name="medicine_name"
+                           maxlength="{{ max_medicine_name_length }}"
+                           value="{{ form_values.get('medicine_name', '') }}"
+                           placeholder="예: 혈압약"
+                           required>
+                </label>
+
+                <label>
                     예정 날짜
                     <input type="date"
                            name="scheduled_date"
@@ -91,6 +101,7 @@
                     <thead>
                         <tr>
                             <th>ID</th>
+                            <th>약 이름</th>
                             <th>예정 시각</th>
                             <th>허용시간</th>
                             <th>배출 좌표</th>
@@ -104,6 +115,7 @@
                         {% for schedule in schedules %}
                             <tr>
                                 <td>{{ schedule.id }}</td>
+                                <td>{{ schedule.medicine_name }}</td>
                                 <td>{{ schedule.scheduled_at }}</td>
                                 <td>
                                     {{ schedule.allowed_seconds // 3600 }}시간
@@ -118,13 +130,8 @@
                                 </td>
                                 <td>{{ schedule.status }}</td>
                                 <td>
-                                    {% if schedule.synced %}
-                                        ACK 수신
-                                    {% elif schedule.command_sent_at %}
-                                        ACK 대기
-                                    {% else %}
-                                        미전송
-                                    {% endif %}
+                                    이동: {{ schedule.move_request_id or '미전송' }}<br>
+                                    배출: {{ schedule.dispense_request_id or '미전송' }}
                                 </td>
                                 <td>
                                     <form class="inline-form"
@@ -144,7 +151,7 @@
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="7">
+                                <td colspan="8">
                                     등록된 일정이 없습니다.
                                 </td>
                             </tr>

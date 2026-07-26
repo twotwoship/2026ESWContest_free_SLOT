@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "slotguard-power must run as root" >&2
+    exit 1
+fi
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: slotguard-power <poweroff|reboot>" >&2
+    exit 2
+fi
+
+case "$1" in
+    poweroff)
+        exec /usr/bin/systemctl poweroff
+        ;;
+    reboot)
+        exec /usr/bin/systemctl reboot
+        ;;
+    *)
+        echo "unsupported action: $1" >&2
+        exit 2
+        ;;
+esac
