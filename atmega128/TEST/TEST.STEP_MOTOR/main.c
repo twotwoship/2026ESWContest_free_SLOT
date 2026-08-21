@@ -1,132 +1,191 @@
 /*
- * 28BYJ-48 + ULN2003 스테퍼 모터 - UART 방향 제어
+ * 28BYJ-48 + ULN2003 스테퍼 모터 - 스텝 수 실측(캘리브레이션) 테스트
  * ATmega128A, F_CPU = 16MHz, UART0 9600bps
  *
  * 배선:
- *   PC0 -> ULN2003 IN1
- *   PC1 -> ULN2003 IN2
- *   PC2 -> ULN2003 IN3
- *   PC3 -> ULN2003 IN4
+ *   PA0 -> ULN2003 IN1
+ *   PA1 -> ULN2003 IN2
+ *   PA2 -> ULN2003 IN3
+ *   PA3 -> ULN2003 IN4
  *   ULN2003 VDD -> 외부 5V (CP2102 5V)
  *   ULN2003 GND -> 공통 GND
  *
- * UART 명령 (터미널에서 문자 입력):
- *   'f' : 정방향 회전 시작
- *   'b' : 역방향 회전 시작
- *   's' : 정지
+ * UART 명령 (터미널에서 문자 입력, Enter 불필요):
+ *   'g' : 정방향 연속 회전 시작
+ *   'r' : 역방향 연속 회전 시작
+ *   ' '(스페이스) : 즉시 정지 + 누적 스텝 수 / 경과 시간(ms) 출력
  */
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <util/delay.h>
+#include "step_motor.h"
 
-// 4상 풀스텝 시퀀스 (IN1~IN4 = PC0~PC3)
-static const uint8_t FULL_STEP[4] = {
-    0b0001,
-    0b0010,
-    0b0100,
-    0b1000
-};
+/* ================= 공통 tick (Timer2, 1ms) =================
+ * ATmega128 Timer2는 (ATmega8/328p와 달리) 비동기(async) 지원 타이머가 아니라
+ * Timer1과 같은 5단계 표준 분주 테이블을 쓴다. CS21:CS20=11 -> clk/64.
+ */
+static volatile uint16_t g_tick_ms = 0;
 
-#define STEP_DELAY_MS 3
-
-// 모터 상태: 0 = 정지, 1 = 정방향, 2 = 역방향
-volatile uint8_t motor_state = 0;
-
-void motor_write(uint8_t pattern)
+static void Timer2_Init(void)
 {
-    PORTC = (PORTC & 0xF0) | (pattern & 0x0F);
+	TCCR2 = (1 << WGM21) | (1 << CS21) | (1 << CS20);   // CTC 모드, prescaler 64
+	OCR2  = 249;                                          // 250카운트 -> 1ms
+	TIMSK |= (1 << OCIE2);
 }
 
-void uart0_init(uint16_t baud)
+ISR(TIMER2_COMP_vect)
 {
-    uint16_t ubrr = (F_CPU / 16 / baud) - 1;
-
-    UBRR0H = (uint8_t)(ubrr >> 8);
-    UBRR0L = (uint8_t)ubrr;
-
-    // 송신, 수신, RX 인터럽트 모두 사용
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
-
-    // 비동기, 패리티 없음, 스톱비트 1, 데이터 8비트
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+	g_tick_ms++;
 }
 
-void uart0_putc(char c)
+static uint16_t get_tick_safe(void)
 {
-    while (!(UCSR0A & (1 << UDRE0)))
-        ;
-    UDR0 = c;
+	uint16_t t;
+	cli();
+	t = g_tick_ms;
+	sei();
+	return t;
 }
 
-void uart0_puts(const char *s)
+/* ================= UART0 ================= */
+#define UART0_BAUD 9600
+
+static volatile char    s_key_char  = 0;
+static volatile uint8_t s_key_ready = 0;
+
+static void UART0_Init(void)
 {
-    while (*s) {
-        uart0_putc(*s);
-        s++;
-    }
+	uint16_t ubrr = (F_CPU / 16 / UART0_BAUD) - 1;
+
+	UBRR0H = (uint8_t)(ubrr >> 8);
+	UBRR0L = (uint8_t)ubrr;
+
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
-// UART 수신 인터럽트: 문자 하나 받을 때마다 모터 상태만 갱신
+static void UART0_TxChar(char c)
+{
+	while (!(UCSR0A & (1 << UDRE0)));
+	UDR0 = c;
+}
+
+static void UART0_TxString(const char *str)
+{
+	while (*str)
+	{
+		UART0_TxChar(*str++);
+	}
+}
+
+static void UART0_TxUint16(uint16_t num)
+{
+	char buf[6];
+	uint8_t i = 0;
+
+	if (num == 0)
+	{
+		UART0_TxChar('0');
+		return;
+	}
+
+	while (num > 0)
+	{
+		buf[i++] = '0' + (num % 10);
+		num /= 10;
+	}
+
+	while (i > 0)
+	{
+		UART0_TxChar(buf[--i]);
+	}
+}
+
+// 문자 1개를 받는 즉시 명령으로 확정 (Enter 불필요)
 ISR(USART0_RX_vect)
 {
-    uint8_t cmd = UDR0;
+	char c = UDR0;
 
-    switch (cmd) {
-        case 'f':
-        case 'F':
-            motor_state = 1;
-            uart0_puts("FORWARD\r\n");
-            break;
-        case 'b':
-        case 'B':
-            motor_state = 2;
-            uart0_puts("BACKWARD\r\n");
-            break;
-        case 's':
-        case 'S':
-            motor_state = 0;
-            uart0_puts("STOP\r\n");
-            break;
-        default:
-            // 정의되지 않은 명령은 무시
-            break;
-    }
+	if (s_key_ready)
+	{
+		return; // 이전 키가 아직 처리되지 않음
+	}
+
+	s_key_char  = c;
+	s_key_ready = 1;
 }
 
+static uint8_t UART0_KeyReady(void)
+{
+	return s_key_ready;
+}
+
+static char UART0_ReadKey(void)
+{
+	char c = s_key_char;
+
+	s_key_ready = 0;
+
+	return c;
+}
+
+/* ================= main ================= */
 int main(void)
 {
-    DDRC |= 0x0F;      // PC0~PC3 출력
-    uart0_init(9600);
+	UART0_Init();
+	Timer2_Init();
+	Stepper_Init();
+	sei();
 
-    sei();             // 전역 인터럽트 활성화
+	UART0_TxString("Step Calibration Mode\r\n");
+	UART0_TxString("g=forward run, r=reverse run, SPACE=stop & report\r\n");
 
-    static uint8_t step_index = 0;
+	uint16_t run_start_tick = 0;
 
-    uart0_puts("READY (f/b/s)\r\n");
+	while (1)
+	{
+		uint16_t now = get_tick_safe();
 
-    while (1) {
-        switch (motor_state) {
-            case 1: // 정방향
-                motor_write(FULL_STEP[step_index % 4]);
-                step_index++;
-                _delay_ms(STEP_DELAY_MS);
-                break;
+		Stepper_Update(now);
 
-            case 2: // 역방향
-                motor_write(FULL_STEP[step_index % 4]);
-                // 부호 있는 뺄셈이 아니라 +3(=-1 mod 4)로 처리하여
-                // uint8_t 언더플로우를 피함
-                step_index = (step_index + 3) % 4;
-                _delay_ms(STEP_DELAY_MS);
-                break;
+		if (UART0_KeyReady())
+		{
+			char key = UART0_ReadKey();
 
-            case 0: // 정지
-            default:
-                // 아무것도 안 함 (다음 명령 대기)
-                break;
-        }
-    }
+			if (key == 'g' || key == 'G')
+			{
+				Stepper_StartContinuous(0, now);
+				run_start_tick = now;
+				UART0_TxString("RUN FORWARD...\r\n");
+			}
+			else if (key == 'r' || key == 'R')
+			{
+				Stepper_StartContinuous(1, now);
+				run_start_tick = now;
+				UART0_TxString("RUN REVERSE...\r\n");
+			}
+			else if (key == ' ')
+			{
+				if (Stepper_IsMoving())
+				{
+					Stepper_Stop();
 
-    return 0;
+					uint16_t steps   = Stepper_GetStepCount();
+					uint16_t elapsed = (uint16_t)(now - run_start_tick);
+
+					UART0_TxString("STOP: steps=");
+					UART0_TxUint16(steps);
+					UART0_TxString(" time=");
+					UART0_TxUint16(elapsed);
+					UART0_TxString(" ms\r\n");
+				}
+				else
+				{
+					UART0_TxString("NOT RUNNING\r\n");
+				}
+			}
+		}
+	}
+
+	return 0;
 }

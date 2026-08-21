@@ -541,11 +541,11 @@ END GROUP
  *(.debug_frame)
  .debug_frame   0x00000000      0x100 main.o
 
-.debug_str      0x00000000      0x4e4
+.debug_str      0x00000000      0x4e3
  *(.debug_str)
  .debug_str     0x00000000      0x27d C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51/crtatmega128a.o
- .debug_str     0x0000027d      0x267 main.o
-                                0x2a0 (size before relaxing)
+ .debug_str     0x0000027d      0x266 main.o
+                                0x29f (size before relaxing)
 
 .debug_loc      0x00000000      0x1be
  *(.debug_loc)

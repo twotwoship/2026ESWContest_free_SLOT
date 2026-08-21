@@ -3,29 +3,31 @@ TEST.IRSENSOR.elf:     file format elf32-avr
 
 Sections:
 Idx Name          Size      VMA       LMA       File off  Algn
-  0 .data         0000007e  00800100  000001b0  00000224  2**0
+  0 .data         00000082  00800100  00000338  000003cc  2**0
                   CONTENTS, ALLOC, LOAD, DATA
-  1 .text         000001b0  00000000  00000000  00000074  2**1
+  1 .text         00000338  00000000  00000000  00000094  2**1
                   CONTENTS, ALLOC, LOAD, READONLY, CODE
-  2 .comment      00000030  00000000  00000000  000002a2  2**0
+  2 .bss          00000008  00800182  00800182  0000044e  2**0
+                  ALLOC
+  3 .comment      00000030  00000000  00000000  0000044e  2**0
                   CONTENTS, READONLY
-  3 .note.gnu.avr.deviceinfo 00000040  00000000  00000000  000002d4  2**2
+  4 .note.gnu.avr.deviceinfo 00000040  00000000  00000000  00000480  2**2
                   CONTENTS, READONLY
-  4 .debug_aranges 00000048  00000000  00000000  00000314  2**0
+  5 .debug_aranges 00000070  00000000  00000000  000004c0  2**0
                   CONTENTS, READONLY, DEBUGGING
-  5 .debug_info   00000a2f  00000000  00000000  0000035c  2**0
+  6 .debug_info   00000b2f  00000000  00000000  00000530  2**0
                   CONTENTS, READONLY, DEBUGGING
-  6 .debug_abbrev 000008d1  00000000  00000000  00000d8b  2**0
+  7 .debug_abbrev 000008e7  00000000  00000000  0000105f  2**0
                   CONTENTS, READONLY, DEBUGGING
-  7 .debug_line   00000380  00000000  00000000  0000165c  2**0
+  8 .debug_line   0000041e  00000000  00000000  00001946  2**0
                   CONTENTS, READONLY, DEBUGGING
-  8 .debug_frame  00000080  00000000  00000000  000019dc  2**2
+  9 .debug_frame  00000110  00000000  00000000  00001d64  2**2
                   CONTENTS, READONLY, DEBUGGING
-  9 .debug_str    00000458  00000000  00000000  00001a5c  2**0
+ 10 .debug_str    00000496  00000000  00000000  00001e74  2**0
                   CONTENTS, READONLY, DEBUGGING
- 10 .debug_loc    00000189  00000000  00000000  00001eb4  2**0
+ 11 .debug_loc    00000265  00000000  00000000  0000230a  2**0
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_ranges 00000038  00000000  00000000  0000203d  2**0
+ 12 .debug_ranges 00000060  00000000  00000000  0000256f  2**0
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -33,73 +35,73 @@ Disassembly of section .text:
 00000000 <__vectors>:
    0:	45 c0       	rjmp	.+138    	; 0x8c <__ctors_end>
    2:	00 00       	nop
-   4:	58 c0       	rjmp	.+176    	; 0xb6 <__bad_interrupt>
+   4:	60 c0       	rjmp	.+192    	; 0xc6 <__bad_interrupt>
    6:	00 00       	nop
-   8:	56 c0       	rjmp	.+172    	; 0xb6 <__bad_interrupt>
+   8:	5e c0       	rjmp	.+188    	; 0xc6 <__bad_interrupt>
    a:	00 00       	nop
-   c:	54 c0       	rjmp	.+168    	; 0xb6 <__bad_interrupt>
+   c:	09 c1       	rjmp	.+530    	; 0x220 <__vector_3>
    e:	00 00       	nop
-  10:	52 c0       	rjmp	.+164    	; 0xb6 <__bad_interrupt>
+  10:	5a c0       	rjmp	.+180    	; 0xc6 <__bad_interrupt>
   12:	00 00       	nop
-  14:	50 c0       	rjmp	.+160    	; 0xb6 <__bad_interrupt>
+  14:	58 c0       	rjmp	.+176    	; 0xc6 <__bad_interrupt>
   16:	00 00       	nop
-  18:	4e c0       	rjmp	.+156    	; 0xb6 <__bad_interrupt>
+  18:	56 c0       	rjmp	.+172    	; 0xc6 <__bad_interrupt>
   1a:	00 00       	nop
-  1c:	4c c0       	rjmp	.+152    	; 0xb6 <__bad_interrupt>
+  1c:	54 c0       	rjmp	.+168    	; 0xc6 <__bad_interrupt>
   1e:	00 00       	nop
-  20:	4a c0       	rjmp	.+148    	; 0xb6 <__bad_interrupt>
+  20:	52 c0       	rjmp	.+164    	; 0xc6 <__bad_interrupt>
   22:	00 00       	nop
-  24:	48 c0       	rjmp	.+144    	; 0xb6 <__bad_interrupt>
+  24:	cf c0       	rjmp	.+414    	; 0x1c4 <__vector_9>
   26:	00 00       	nop
-  28:	46 c0       	rjmp	.+140    	; 0xb6 <__bad_interrupt>
+  28:	4e c0       	rjmp	.+156    	; 0xc6 <__bad_interrupt>
   2a:	00 00       	nop
-  2c:	44 c0       	rjmp	.+136    	; 0xb6 <__bad_interrupt>
+  2c:	4c c0       	rjmp	.+152    	; 0xc6 <__bad_interrupt>
   2e:	00 00       	nop
-  30:	42 c0       	rjmp	.+132    	; 0xb6 <__bad_interrupt>
+  30:	4a c0       	rjmp	.+148    	; 0xc6 <__bad_interrupt>
   32:	00 00       	nop
-  34:	40 c0       	rjmp	.+128    	; 0xb6 <__bad_interrupt>
+  34:	48 c0       	rjmp	.+144    	; 0xc6 <__bad_interrupt>
   36:	00 00       	nop
-  38:	3e c0       	rjmp	.+124    	; 0xb6 <__bad_interrupt>
+  38:	46 c0       	rjmp	.+140    	; 0xc6 <__bad_interrupt>
   3a:	00 00       	nop
-  3c:	3c c0       	rjmp	.+120    	; 0xb6 <__bad_interrupt>
+  3c:	44 c0       	rjmp	.+136    	; 0xc6 <__bad_interrupt>
   3e:	00 00       	nop
-  40:	3a c0       	rjmp	.+116    	; 0xb6 <__bad_interrupt>
+  40:	42 c0       	rjmp	.+132    	; 0xc6 <__bad_interrupt>
   42:	00 00       	nop
-  44:	38 c0       	rjmp	.+112    	; 0xb6 <__bad_interrupt>
+  44:	40 c0       	rjmp	.+128    	; 0xc6 <__bad_interrupt>
   46:	00 00       	nop
-  48:	36 c0       	rjmp	.+108    	; 0xb6 <__bad_interrupt>
+  48:	3e c0       	rjmp	.+124    	; 0xc6 <__bad_interrupt>
   4a:	00 00       	nop
-  4c:	34 c0       	rjmp	.+104    	; 0xb6 <__bad_interrupt>
+  4c:	3c c0       	rjmp	.+120    	; 0xc6 <__bad_interrupt>
   4e:	00 00       	nop
-  50:	32 c0       	rjmp	.+100    	; 0xb6 <__bad_interrupt>
+  50:	3a c0       	rjmp	.+116    	; 0xc6 <__bad_interrupt>
   52:	00 00       	nop
-  54:	30 c0       	rjmp	.+96     	; 0xb6 <__bad_interrupt>
+  54:	38 c0       	rjmp	.+112    	; 0xc6 <__bad_interrupt>
   56:	00 00       	nop
-  58:	2e c0       	rjmp	.+92     	; 0xb6 <__bad_interrupt>
+  58:	36 c0       	rjmp	.+108    	; 0xc6 <__bad_interrupt>
   5a:	00 00       	nop
-  5c:	2c c0       	rjmp	.+88     	; 0xb6 <__bad_interrupt>
+  5c:	34 c0       	rjmp	.+104    	; 0xc6 <__bad_interrupt>
   5e:	00 00       	nop
-  60:	2a c0       	rjmp	.+84     	; 0xb6 <__bad_interrupt>
+  60:	32 c0       	rjmp	.+100    	; 0xc6 <__bad_interrupt>
   62:	00 00       	nop
-  64:	28 c0       	rjmp	.+80     	; 0xb6 <__bad_interrupt>
+  64:	30 c0       	rjmp	.+96     	; 0xc6 <__bad_interrupt>
   66:	00 00       	nop
-  68:	26 c0       	rjmp	.+76     	; 0xb6 <__bad_interrupt>
+  68:	2e c0       	rjmp	.+92     	; 0xc6 <__bad_interrupt>
   6a:	00 00       	nop
-  6c:	24 c0       	rjmp	.+72     	; 0xb6 <__bad_interrupt>
+  6c:	2c c0       	rjmp	.+88     	; 0xc6 <__bad_interrupt>
   6e:	00 00       	nop
-  70:	22 c0       	rjmp	.+68     	; 0xb6 <__bad_interrupt>
+  70:	2a c0       	rjmp	.+84     	; 0xc6 <__bad_interrupt>
   72:	00 00       	nop
-  74:	20 c0       	rjmp	.+64     	; 0xb6 <__bad_interrupt>
+  74:	28 c0       	rjmp	.+80     	; 0xc6 <__bad_interrupt>
   76:	00 00       	nop
-  78:	1e c0       	rjmp	.+60     	; 0xb6 <__bad_interrupt>
+  78:	26 c0       	rjmp	.+76     	; 0xc6 <__bad_interrupt>
   7a:	00 00       	nop
-  7c:	1c c0       	rjmp	.+56     	; 0xb6 <__bad_interrupt>
+  7c:	24 c0       	rjmp	.+72     	; 0xc6 <__bad_interrupt>
   7e:	00 00       	nop
-  80:	1a c0       	rjmp	.+52     	; 0xb6 <__bad_interrupt>
+  80:	22 c0       	rjmp	.+68     	; 0xc6 <__bad_interrupt>
   82:	00 00       	nop
-  84:	18 c0       	rjmp	.+48     	; 0xb6 <__bad_interrupt>
+  84:	20 c0       	rjmp	.+64     	; 0xc6 <__bad_interrupt>
   86:	00 00       	nop
-  88:	16 c0       	rjmp	.+44     	; 0xb6 <__bad_interrupt>
+  88:	1e c0       	rjmp	.+60     	; 0xc6 <__bad_interrupt>
 	...
 
 0000008c <__ctors_end>:
@@ -114,246 +116,400 @@ Disassembly of section .text:
   98:	11 e0       	ldi	r17, 0x01	; 1
   9a:	a0 e0       	ldi	r26, 0x00	; 0
   9c:	b1 e0       	ldi	r27, 0x01	; 1
-  9e:	e0 eb       	ldi	r30, 0xB0	; 176
-  a0:	f1 e0       	ldi	r31, 0x01	; 1
+  9e:	e8 e3       	ldi	r30, 0x38	; 56
+  a0:	f3 e0       	ldi	r31, 0x03	; 3
   a2:	00 e0       	ldi	r16, 0x00	; 0
   a4:	0b bf       	out	0x3b, r16	; 59
   a6:	02 c0       	rjmp	.+4      	; 0xac <__do_copy_data+0x14>
   a8:	07 90       	elpm	r0, Z+
   aa:	0d 92       	st	X+, r0
-  ac:	ae 37       	cpi	r26, 0x7E	; 126
+  ac:	a2 38       	cpi	r26, 0x82	; 130
   ae:	b1 07       	cpc	r27, r17
   b0:	d9 f7       	brne	.-10     	; 0xa8 <__do_copy_data+0x10>
-  b2:	2f d0       	rcall	.+94     	; 0x112 <main>
-  b4:	7b c0       	rjmp	.+246    	; 0x1ac <_exit>
 
-000000b6 <__bad_interrupt>:
-  b6:	a4 cf       	rjmp	.-184    	; 0x0 <__vectors>
+000000b2 <__do_clear_bss>:
+  b2:	21 e0       	ldi	r18, 0x01	; 1
+  b4:	a2 e8       	ldi	r26, 0x82	; 130
+  b6:	b1 e0       	ldi	r27, 0x01	; 1
+  b8:	01 c0       	rjmp	.+2      	; 0xbc <.do_clear_bss_start>
 
-000000b8 <UART0_Init>:
-#define SENSOR_PIN   PIND
-#define SENSOR_BIT   PD4
+000000ba <.do_clear_bss_loop>:
+  ba:	1d 92       	st	X+, r1
 
-// ---------------- UART 함수 (서보 코드와 동일) ----------------
-void UART0_Init(unsigned long baud)
-{
-  b8:	9b 01       	movw	r18, r22
-  ba:	ac 01       	movw	r20, r24
-    unsigned int ubrr = (F_CPU / 16 / baud) - 1;
-  bc:	60 e4       	ldi	r22, 0x40	; 64
-  be:	72 e4       	ldi	r23, 0x42	; 66
-  c0:	8f e0       	ldi	r24, 0x0F	; 15
-  c2:	90 e0       	ldi	r25, 0x00	; 0
-  c4:	51 d0       	rcall	.+162    	; 0x168 <__udivmodsi4>
-  c6:	21 50       	subi	r18, 0x01	; 1
-  c8:	31 09       	sbc	r19, r1
-    UBRR0H = (unsigned char)(ubrr >> 8);
-  ca:	30 93 90 00 	sts	0x0090, r19	; 0x800090 <__TEXT_REGION_LENGTH__+0x7e0090>
-    UBRR0L = (unsigned char)ubrr;
-  ce:	29 b9       	out	0x09, r18	; 9
-    UCSR0B = (1 << TXEN0) | (1 << RXEN0);      // 송신, 수신 활성화
-  d0:	88 e1       	ldi	r24, 0x18	; 24
-  d2:	8a b9       	out	0x0a, r24	; 10
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);    // 8bit, 1 stop bit, no parity
-  d4:	86 e0       	ldi	r24, 0x06	; 6
-  d6:	80 93 95 00 	sts	0x0095, r24	; 0x800095 <__TEXT_REGION_LENGTH__+0x7e0095>
-  da:	08 95       	ret
+000000bc <.do_clear_bss_start>:
+  bc:	aa 38       	cpi	r26, 0x8A	; 138
+  be:	b2 07       	cpc	r27, r18
+  c0:	e1 f7       	brne	.-8      	; 0xba <.do_clear_bss_loop>
+  c2:	c7 d0       	rcall	.+398    	; 0x252 <main>
+  c4:	37 c1       	rjmp	.+622    	; 0x334 <_exit>
 
-000000dc <UART0_TxChar>:
+000000c6 <__bad_interrupt>:
+  c6:	9c cf       	rjmp	.-200    	; 0x0 <__vectors>
+
+000000c8 <UART0_Init>:
+	uint16_t t;
+	cli();
+	t = g_tick_ms;
+	sei();
+	return t;
 }
+  c8:	9b 01       	movw	r18, r22
+  ca:	ac 01       	movw	r20, r24
+  cc:	60 e4       	ldi	r22, 0x40	; 64
+  ce:	72 e4       	ldi	r23, 0x42	; 66
+  d0:	8f e0       	ldi	r24, 0x0F	; 15
+  d2:	90 e0       	ldi	r25, 0x00	; 0
+  d4:	fe d0       	rcall	.+508    	; 0x2d2 <__udivmodsi4>
+  d6:	21 50       	subi	r18, 0x01	; 1
+  d8:	31 09       	sbc	r19, r1
+  da:	30 93 90 00 	sts	0x0090, r19	; 0x800090 <__TEXT_REGION_LENGTH__+0x7e0090>
+  de:	29 b9       	out	0x09, r18	; 9
+  e0:	88 e1       	ldi	r24, 0x18	; 24
+  e2:	8a b9       	out	0x0a, r24	; 10
+  e4:	86 e0       	ldi	r24, 0x06	; 6
+  e6:	80 93 95 00 	sts	0x0095, r24	; 0x800095 <__TEXT_REGION_LENGTH__+0x7e0095>
+  ea:	08 95       	ret
 
-void UART0_TxChar(char data)
-{
-    while (!(UCSR0A & (1 << UDRE0)));  // 송신 버퍼 비었는지 대기
-  dc:	5d 9b       	sbis	0x0b, 5	; 11
-  de:	fe cf       	rjmp	.-4      	; 0xdc <UART0_TxChar>
-    UDR0 = data;
-  e0:	8c b9       	out	0x0c, r24	; 12
-  e2:	08 95       	ret
+000000ec <UART0_TxChar>:
+  ec:	5d 9b       	sbis	0x0b, 5	; 11
+  ee:	fe cf       	rjmp	.-4      	; 0xec <UART0_TxChar>
+  f0:	8c b9       	out	0x0c, r24	; 12
+  f2:	08 95       	ret
 
-000000e4 <UART0_TxString>:
-}
+000000f4 <UART0_TxString>:
+  f4:	cf 93       	push	r28
+  f6:	df 93       	push	r29
+  f8:	ec 01       	movw	r28, r24
+  fa:	02 c0       	rjmp	.+4      	; 0x100 <UART0_TxString+0xc>
+  fc:	21 96       	adiw	r28, 0x01	; 1
+  fe:	f6 df       	rcall	.-20     	; 0xec <UART0_TxChar>
+ 100:	88 81       	ld	r24, Y
+ 102:	81 11       	cpse	r24, r1
+ 104:	fb cf       	rjmp	.-10     	; 0xfc <UART0_TxString+0x8>
+ 106:	df 91       	pop	r29
+ 108:	cf 91       	pop	r28
+ 10a:	08 95       	ret
 
-void UART0_TxString(const char *str)
-{
-  e4:	cf 93       	push	r28
-  e6:	df 93       	push	r29
-  e8:	ec 01       	movw	r28, r24
-    while (*str)
-  ea:	02 c0       	rjmp	.+4      	; 0xf0 <UART0_TxString+0xc>
-    {
-        UART0_TxChar(*str++);
-  ec:	21 96       	adiw	r28, 0x01	; 1
-  ee:	f6 df       	rcall	.-20     	; 0xdc <UART0_TxChar>
-    UDR0 = data;
-}
+0000010c <UART0_TxUint16>:
+ 10c:	1f 93       	push	r17
+ 10e:	cf 93       	push	r28
+ 110:	df 93       	push	r29
+ 112:	00 d0       	rcall	.+0      	; 0x114 <UART0_TxUint16+0x8>
+ 114:	00 d0       	rcall	.+0      	; 0x116 <UART0_TxUint16+0xa>
+ 116:	00 d0       	rcall	.+0      	; 0x118 <UART0_TxUint16+0xc>
+ 118:	cd b7       	in	r28, 0x3d	; 61
+ 11a:	de b7       	in	r29, 0x3e	; 62
+ 11c:	ac 01       	movw	r20, r24
+ 11e:	89 2b       	or	r24, r25
+ 120:	79 f5       	brne	.+94     	; 0x180 <UART0_TxUint16+0x74>
+ 122:	80 e3       	ldi	r24, 0x30	; 48
+ 124:	e3 df       	rcall	.-58     	; 0xec <UART0_TxChar>
+ 126:	3c c0       	rjmp	.+120    	; 0x1a0 <UART0_TxUint16+0x94>
+ 128:	9a 01       	movw	r18, r20
+ 12a:	ad ec       	ldi	r26, 0xCD	; 205
+ 12c:	bc ec       	ldi	r27, 0xCC	; 204
+ 12e:	f3 d0       	rcall	.+486    	; 0x316 <__umulhisi3>
+ 130:	96 95       	lsr	r25
+ 132:	87 95       	ror	r24
+ 134:	96 95       	lsr	r25
+ 136:	87 95       	ror	r24
+ 138:	96 95       	lsr	r25
+ 13a:	87 95       	ror	r24
+ 13c:	9c 01       	movw	r18, r24
+ 13e:	22 0f       	add	r18, r18
+ 140:	33 1f       	adc	r19, r19
+ 142:	88 0f       	add	r24, r24
+ 144:	99 1f       	adc	r25, r25
+ 146:	88 0f       	add	r24, r24
+ 148:	99 1f       	adc	r25, r25
+ 14a:	88 0f       	add	r24, r24
+ 14c:	99 1f       	adc	r25, r25
+ 14e:	82 0f       	add	r24, r18
+ 150:	93 1f       	adc	r25, r19
+ 152:	9a 01       	movw	r18, r20
+ 154:	28 1b       	sub	r18, r24
+ 156:	39 0b       	sbc	r19, r25
+ 158:	c9 01       	movw	r24, r18
+ 15a:	e1 e0       	ldi	r30, 0x01	; 1
+ 15c:	f0 e0       	ldi	r31, 0x00	; 0
+ 15e:	ec 0f       	add	r30, r28
+ 160:	fd 1f       	adc	r31, r29
+ 162:	e1 0f       	add	r30, r17
+ 164:	f1 1d       	adc	r31, r1
+ 166:	80 5d       	subi	r24, 0xD0	; 208
+ 168:	80 83       	st	Z, r24
+ 16a:	9a 01       	movw	r18, r20
+ 16c:	d4 d0       	rcall	.+424    	; 0x316 <__umulhisi3>
+ 16e:	ac 01       	movw	r20, r24
+ 170:	56 95       	lsr	r21
+ 172:	47 95       	ror	r20
+ 174:	56 95       	lsr	r21
+ 176:	47 95       	ror	r20
+ 178:	56 95       	lsr	r21
+ 17a:	47 95       	ror	r20
+ 17c:	1f 5f       	subi	r17, 0xFF	; 255
+ 17e:	01 c0       	rjmp	.+2      	; 0x182 <UART0_TxUint16+0x76>
+ 180:	10 e0       	ldi	r17, 0x00	; 0
+ 182:	41 15       	cp	r20, r1
+ 184:	51 05       	cpc	r21, r1
+ 186:	81 f6       	brne	.-96     	; 0x128 <UART0_TxUint16+0x1c>
+ 188:	09 c0       	rjmp	.+18     	; 0x19c <UART0_TxUint16+0x90>
+ 18a:	11 50       	subi	r17, 0x01	; 1
+ 18c:	e1 e0       	ldi	r30, 0x01	; 1
+ 18e:	f0 e0       	ldi	r31, 0x00	; 0
+ 190:	ec 0f       	add	r30, r28
+ 192:	fd 1f       	adc	r31, r29
+ 194:	e1 0f       	add	r30, r17
+ 196:	f1 1d       	adc	r31, r1
+ 198:	80 81       	ld	r24, Z
+ 19a:	a8 df       	rcall	.-176    	; 0xec <UART0_TxChar>
+ 19c:	11 11       	cpse	r17, r1
+ 19e:	f5 cf       	rjmp	.-22     	; 0x18a <UART0_TxUint16+0x7e>
+ 1a0:	26 96       	adiw	r28, 0x06	; 6
+ 1a2:	0f b6       	in	r0, 0x3f	; 63
+ 1a4:	f8 94       	cli
+ 1a6:	de bf       	out	0x3e, r29	; 62
+ 1a8:	0f be       	out	0x3f, r0	; 63
+ 1aa:	cd bf       	out	0x3d, r28	; 61
+ 1ac:	df 91       	pop	r29
+ 1ae:	cf 91       	pop	r28
+ 1b0:	1f 91       	pop	r17
+ 1b2:	08 95       	ret
 
-void UART0_TxString(const char *str)
-{
-    while (*str)
-  f0:	88 81       	ld	r24, Y
-  f2:	81 11       	cpse	r24, r1
-  f4:	fb cf       	rjmp	.-10     	; 0xec <UART0_TxString+0x8>
-    {
-        UART0_TxChar(*str++);
-    }
-}
-  f6:	df 91       	pop	r29
-  f8:	cf 91       	pop	r28
-  fa:	08 95       	ret
+000001b4 <Timer2_Init>:
+ 1b4:	8c e0       	ldi	r24, 0x0C	; 12
+ 1b6:	85 bd       	out	0x25, r24	; 37
+ 1b8:	89 ef       	ldi	r24, 0xF9	; 249
+ 1ba:	83 bd       	out	0x23, r24	; 35
+ 1bc:	87 b7       	in	r24, 0x37	; 55
+ 1be:	80 68       	ori	r24, 0x80	; 128
+ 1c0:	87 bf       	out	0x37, r24	; 55
+ 1c2:	08 95       	ret
 
-000000fc <Sensor_Init>:
+000001c4 <__vector_9>:
+ 1c4:	1f 92       	push	r1
+ 1c6:	0f 92       	push	r0
+ 1c8:	0f b6       	in	r0, 0x3f	; 63
+ 1ca:	0f 92       	push	r0
+ 1cc:	11 24       	eor	r1, r1
+ 1ce:	8f 93       	push	r24
+ 1d0:	9f 93       	push	r25
+ 1d2:	80 91 86 01 	lds	r24, 0x0186	; 0x800186 <g_tick_ms>
+ 1d6:	90 91 87 01 	lds	r25, 0x0187	; 0x800187 <g_tick_ms+0x1>
+ 1da:	01 96       	adiw	r24, 0x01	; 1
+ 1dc:	90 93 87 01 	sts	0x0187, r25	; 0x800187 <g_tick_ms+0x1>
+ 1e0:	80 93 86 01 	sts	0x0186, r24	; 0x800186 <g_tick_ms>
+ 1e4:	9f 91       	pop	r25
+ 1e6:	8f 91       	pop	r24
+ 1e8:	0f 90       	pop	r0
+ 1ea:	0f be       	out	0x3f, r0	; 63
+ 1ec:	0f 90       	pop	r0
+ 1ee:	1f 90       	pop	r1
+ 1f0:	18 95       	reti
 
-// ---------------- 센서 함수 ----------------
-void Sensor_Init(void)
-{
-    SENSOR_DDR  &= ~(1 << SENSOR_BIT);   // 입력
-  fc:	81 b3       	in	r24, 0x11	; 17
-  fe:	8f 7e       	andi	r24, 0xEF	; 239
- 100:	81 bb       	out	0x11, r24	; 17
-    SENSOR_PORT |=  (1 << SENSOR_BIT);   // 내부 풀업 ON
- 102:	82 b3       	in	r24, 0x12	; 18
- 104:	80 61       	ori	r24, 0x10	; 16
- 106:	82 bb       	out	0x12, r24	; 18
- 108:	08 95       	ret
+000001f2 <Sensor_Init>:
+ 1f2:	81 b3       	in	r24, 0x11	; 17
+ 1f4:	8b 7f       	andi	r24, 0xFB	; 251
+ 1f6:	81 bb       	out	0x11, r24	; 17
+ 1f8:	82 b3       	in	r24, 0x12	; 18
+ 1fa:	84 60       	ori	r24, 0x04	; 4
+ 1fc:	82 bb       	out	0x12, r24	; 18
+ 1fe:	ea e6       	ldi	r30, 0x6A	; 106
+ 200:	f0 e0       	ldi	r31, 0x00	; 0
+ 202:	80 81       	ld	r24, Z
+ 204:	8f 7c       	andi	r24, 0xCF	; 207
+ 206:	80 83       	st	Z, r24
+ 208:	80 81       	ld	r24, Z
+ 20a:	80 61       	ori	r24, 0x10	; 16
+ 20c:	80 83       	st	Z, r24
+ 20e:	89 b7       	in	r24, 0x39	; 57
+ 210:	84 60       	ori	r24, 0x04	; 4
+ 212:	89 bf       	out	0x39, r24	; 57
+ 214:	08 95       	ret
 
-0000010a <Sensor_Read>:
-}
+00000216 <Sensor_Read>:
+ 216:	80 b3       	in	r24, 0x10	; 16
+ 218:	82 fb       	bst	r24, 2
+ 21a:	88 27       	eor	r24, r24
+ 21c:	80 f9       	bld	r24, 0
+ 21e:	08 95       	ret
 
-// 1: 빔 연결(정상), 0: 빔 차단(물체 감지)
-uint8_t Sensor_Read(void)
-{
-    return (SENSOR_PIN & (1 << SENSOR_BIT)) ? 1 : 0;
- 10a:	80 b3       	in	r24, 0x10	; 16
-}
- 10c:	82 95       	swap	r24
- 10e:	81 70       	andi	r24, 0x01	; 1
- 110:	08 95       	ret
+00000220 <__vector_3>:
+ 220:	1f 92       	push	r1
+ 222:	0f 92       	push	r0
+ 224:	0f b6       	in	r0, 0x3f	; 63
+ 226:	0f 92       	push	r0
+ 228:	11 24       	eor	r1, r1
+ 22a:	8f 93       	push	r24
+ 22c:	9f 93       	push	r25
+ 22e:	81 e0       	ldi	r24, 0x01	; 1
+ 230:	80 93 88 01 	sts	0x0188, r24	; 0x800188 <g_sensor_event>
+ 234:	80 91 86 01 	lds	r24, 0x0186	; 0x800186 <g_tick_ms>
+ 238:	90 91 87 01 	lds	r25, 0x0187	; 0x800187 <g_tick_ms+0x1>
+ 23c:	90 93 85 01 	sts	0x0185, r25	; 0x800185 <g_last_event_tick+0x1>
+ 240:	80 93 84 01 	sts	0x0184, r24	; 0x800184 <g_last_event_tick>
+ 244:	9f 91       	pop	r25
+ 246:	8f 91       	pop	r24
+ 248:	0f 90       	pop	r0
+ 24a:	0f be       	out	0x3f, r0	; 63
+ 24c:	0f 90       	pop	r0
+ 24e:	1f 90       	pop	r1
+ 250:	18 95       	reti
 
-00000112 <main>:
+00000252 <main>:
 
 int main(void)
 {
-    UART0_Init(9600);
- 112:	60 e8       	ldi	r22, 0x80	; 128
- 114:	75 e2       	ldi	r23, 0x25	; 37
- 116:	80 e0       	ldi	r24, 0x00	; 0
- 118:	90 e0       	ldi	r25, 0x00	; 0
- 11a:	ce df       	rcall	.-100    	; 0xb8 <UART0_Init>
-    Sensor_Init();
- 11c:	ef df       	rcall	.-34     	; 0xfc <Sensor_Init>
- 11e:	87 e2       	ldi	r24, 0x27	; 39
+	UART0_Init(9600);
+ 252:	60 e8       	ldi	r22, 0x80	; 128
+ 254:	75 e2       	ldi	r23, 0x25	; 37
+ 256:	80 e0       	ldi	r24, 0x00	; 0
+ 258:	90 e0       	ldi	r25, 0x00	; 0
+ 25a:	36 df       	rcall	.-404    	; 0xc8 <UART0_Init>
+	Timer2_Init();
+ 25c:	ab df       	rcall	.-170    	; 0x1b4 <Timer2_Init>
+	Sensor_Init();
+ 25e:	c9 df       	rcall	.-110    	; 0x1f2 <Sensor_Init>
+ 260:	78 94       	sei
+	sei();
 
-    UART0_TxString("SEN0503 IR Break Beam UART Test Start\r\n");
- 120:	91 e0       	ldi	r25, 0x01	; 1
- 122:	e0 df       	rcall	.-64     	; 0xe4 <UART0_TxString>
+	UART0_TxString("SEN0503 IR Break Beam INT2 Test Start\r\n");
+ 262:	87 e2       	ldi	r24, 0x27	; 39
+ 264:	91 e0       	ldi	r25, 0x01	; 1
+ 266:	46 df       	rcall	.-372    	; 0xf4 <UART0_TxString>
 
-    uint8_t last_state = Sensor_Read();
- 124:	f2 df       	rcall	.-28     	; 0x10a <Sensor_Read>
- 126:	d8 2f       	mov	r29, r24
- 128:	88 23       	and	r24, r24
-    UART0_TxString(last_state ? "Init: BEAM CLEAR\r\n" : "Init: BEAM BROKEN\r\n");
- 12a:	19 f0       	breq	.+6      	; 0x132 <main+0x20>
- 12c:	80 e0       	ldi	r24, 0x00	; 0
- 12e:	91 e0       	ldi	r25, 0x01	; 1
- 130:	02 c0       	rjmp	.+4      	; 0x136 <main+0x24>
- 132:	83 e1       	ldi	r24, 0x13	; 19
- 134:	91 e0       	ldi	r25, 0x01	; 1
- 136:	d6 df       	rcall	.-84     	; 0xe4 <UART0_TxString>
- 138:	cd 2f       	mov	r28, r29
+	last_state = Sensor_Read();
+ 268:	d6 df       	rcall	.-84     	; 0x216 <Sensor_Read>
+ 26a:	80 93 89 01 	sts	0x0189, r24	; 0x800189 <last_state>
+ 26e:	88 23       	and	r24, r24
+	UART0_TxString(last_state ? "Init: BEAM CLEAR\r\n" : "Init: BEAM BROKEN\r\n");
+ 270:	19 f0       	breq	.+6      	; 0x278 <main+0x26>
+ 272:	80 e0       	ldi	r24, 0x00	; 0
+ 274:	91 e0       	ldi	r25, 0x01	; 1
+ 276:	02 c0       	rjmp	.+4      	; 0x27c <main+0x2a>
+ 278:	83 e1       	ldi	r24, 0x13	; 19
+ 27a:	91 e0       	ldi	r25, 0x01	; 1
+ 27c:	3b df       	rcall	.-394    	; 0xf4 <UART0_TxString>
+ 27e:	80 91 88 01 	lds	r24, 0x0188	; 0x800188 <g_sensor_event>
 
-    while (1)
-    {
-        uint8_t state = Sensor_Read();
- 13a:	e7 df       	rcall	.-50     	; 0x10a <Sensor_Read>
- 13c:	c8 17       	cp	r28, r24
+	while (1)
+	{
+		if (g_sensor_event)
+ 282:	88 23       	and	r24, r24
+ 284:	e1 f3       	breq	.-8      	; 0x27e <main+0x2c>
+		{
+			//if ((uint16_t)(get_tick_safe() - g_last_event_tick) >= DEBOUNCE_MS)
+			if (1)
+			{
+				cli();
+ 286:	f8 94       	cli
+				g_sensor_event = 0;
+ 288:	10 92 88 01 	sts	0x0188, r1	; 0x800188 <g_sensor_event>
+				sei();
+ 28c:	78 94       	sei
 
-        if (state != last_state)
- 13e:	e9 f3       	breq	.-6      	; 0x13a <main+0x28>
- 140:	8f e9       	ldi	r24, 0x9F	; 159
-	#else
-		//round up by default
-		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
-	#endif
+				uint8_t state = Sensor_Read();
+ 28e:	c3 df       	rcall	.-122    	; 0x216 <Sensor_Read>
+ 290:	90 91 89 01 	lds	r25, 0x0189	; 0x800189 <last_state>
+				if (state != last_state)
+ 294:	89 17       	cp	r24, r25
+ 296:	99 f3       	breq	.-26     	; 0x27e <main+0x2c>
+ 298:	80 93 89 01 	sts	0x0189, r24	; 0x800189 <last_state>
+				{
+					last_state = state;
+ 29c:	81 11       	cpse	r24, r1
 
-	__builtin_avr_delay_cycles(__ticks_dc);
- 142:	9f e0       	ldi	r25, 0x0F	; 15
- 144:	01 97       	sbiw	r24, 0x01	; 1
- 146:	f1 f7       	brne	.-4      	; 0x144 <main+0x32>
- 148:	00 c0       	rjmp	.+0      	; 0x14a <main+0x38>
- 14a:	00 00       	nop
-        {
-            _delay_ms(1);              // 간단한 디바운스
-            state = Sensor_Read();      // 재확인
- 14c:	de df       	rcall	.-68     	; 0x10a <Sensor_Read>
- 14e:	d8 2f       	mov	r29, r24
+					if (state == 0)
+ 29e:	15 c0       	rjmp	.+42     	; 0x2ca <main+0x78>
+ 2a0:	80 91 82 01 	lds	r24, 0x0182	; 0x800182 <__data_end>
+					{
+						g_pill_count++;   // 감지될 때마다 카운트 증가
+ 2a4:	90 91 83 01 	lds	r25, 0x0183	; 0x800183 <__data_end+0x1>
+ 2a8:	01 96       	adiw	r24, 0x01	; 1
+ 2aa:	90 93 83 01 	sts	0x0183, r25	; 0x800183 <__data_end+0x1>
+ 2ae:	80 93 82 01 	sts	0x0182, r24	; 0x800182 <__data_end>
 
-            if (state != last_state)
- 150:	c8 17       	cp	r28, r24
- 152:	99 f3       	breq	.-26     	; 0x13a <main+0x28>
-            {
-                last_state = state;
+						UART0_TxString("Object Detected! (BEAM BROKEN) Count=");
+ 2b2:	8f e4       	ldi	r24, 0x4F	; 79
+ 2b4:	91 e0       	ldi	r25, 0x01	; 1
+ 2b6:	1e df       	rcall	.-452    	; 0xf4 <UART0_TxString>
+						UART0_TxUint16(g_pill_count);
+ 2b8:	80 91 82 01 	lds	r24, 0x0182	; 0x800182 <__data_end>
+ 2bc:	90 91 83 01 	lds	r25, 0x0183	; 0x800183 <__data_end+0x1>
+ 2c0:	25 df       	rcall	.-438    	; 0x10c <UART0_TxUint16>
+						UART0_TxString("\r\n");
+ 2c2:	84 e2       	ldi	r24, 0x24	; 36
+ 2c4:	91 e0       	ldi	r25, 0x01	; 1
+ 2c6:	16 df       	rcall	.-468    	; 0xf4 <UART0_TxString>
+ 2c8:	da cf       	rjmp	.-76     	; 0x27e <main+0x2c>
+ 2ca:	85 e7       	ldi	r24, 0x75	; 117
+					}
+					else
+					{
+						UART0_TxString("Beam Clear\r\n");
+ 2cc:	91 e0       	ldi	r25, 0x01	; 1
+ 2ce:	12 df       	rcall	.-476    	; 0xf4 <UART0_TxString>
+ 2d0:	d6 cf       	rjmp	.-84     	; 0x27e <main+0x2c>
 
-                if (state == 0)
- 154:	81 11       	cpse	r24, r1
-                {
-                    UART0_TxString("Object Detected! (BEAM BROKEN)\r\n");
- 156:	04 c0       	rjmp	.+8      	; 0x160 <main+0x4e>
- 158:	8f e4       	ldi	r24, 0x4F	; 79
- 15a:	91 e0       	ldi	r25, 0x01	; 1
- 15c:	c3 df       	rcall	.-122    	; 0xe4 <UART0_TxString>
- 15e:	ec cf       	rjmp	.-40     	; 0x138 <main+0x26>
-                }
-                else
-                {
-                    UART0_TxString("Beam Clear\r\n");
- 160:	80 e7       	ldi	r24, 0x70	; 112
- 162:	91 e0       	ldi	r25, 0x01	; 1
- 164:	bf df       	rcall	.-130    	; 0xe4 <UART0_TxString>
- 166:	e8 cf       	rjmp	.-48     	; 0x138 <main+0x26>
+000002d2 <__udivmodsi4>:
+ 2d2:	a1 e2       	ldi	r26, 0x21	; 33
+ 2d4:	1a 2e       	mov	r1, r26
+ 2d6:	aa 1b       	sub	r26, r26
+ 2d8:	bb 1b       	sub	r27, r27
+ 2da:	fd 01       	movw	r30, r26
+ 2dc:	0d c0       	rjmp	.+26     	; 0x2f8 <__udivmodsi4_ep>
 
-00000168 <__udivmodsi4>:
- 168:	a1 e2       	ldi	r26, 0x21	; 33
- 16a:	1a 2e       	mov	r1, r26
- 16c:	aa 1b       	sub	r26, r26
- 16e:	bb 1b       	sub	r27, r27
- 170:	fd 01       	movw	r30, r26
- 172:	0d c0       	rjmp	.+26     	; 0x18e <__udivmodsi4_ep>
+000002de <__udivmodsi4_loop>:
+ 2de:	aa 1f       	adc	r26, r26
+ 2e0:	bb 1f       	adc	r27, r27
+ 2e2:	ee 1f       	adc	r30, r30
+ 2e4:	ff 1f       	adc	r31, r31
+ 2e6:	a2 17       	cp	r26, r18
+ 2e8:	b3 07       	cpc	r27, r19
+ 2ea:	e4 07       	cpc	r30, r20
+ 2ec:	f5 07       	cpc	r31, r21
+ 2ee:	20 f0       	brcs	.+8      	; 0x2f8 <__udivmodsi4_ep>
+ 2f0:	a2 1b       	sub	r26, r18
+ 2f2:	b3 0b       	sbc	r27, r19
+ 2f4:	e4 0b       	sbc	r30, r20
+ 2f6:	f5 0b       	sbc	r31, r21
 
-00000174 <__udivmodsi4_loop>:
- 174:	aa 1f       	adc	r26, r26
- 176:	bb 1f       	adc	r27, r27
- 178:	ee 1f       	adc	r30, r30
- 17a:	ff 1f       	adc	r31, r31
- 17c:	a2 17       	cp	r26, r18
- 17e:	b3 07       	cpc	r27, r19
- 180:	e4 07       	cpc	r30, r20
- 182:	f5 07       	cpc	r31, r21
- 184:	20 f0       	brcs	.+8      	; 0x18e <__udivmodsi4_ep>
- 186:	a2 1b       	sub	r26, r18
- 188:	b3 0b       	sbc	r27, r19
- 18a:	e4 0b       	sbc	r30, r20
- 18c:	f5 0b       	sbc	r31, r21
+000002f8 <__udivmodsi4_ep>:
+ 2f8:	66 1f       	adc	r22, r22
+ 2fa:	77 1f       	adc	r23, r23
+ 2fc:	88 1f       	adc	r24, r24
+ 2fe:	99 1f       	adc	r25, r25
+ 300:	1a 94       	dec	r1
+ 302:	69 f7       	brne	.-38     	; 0x2de <__udivmodsi4_loop>
+ 304:	60 95       	com	r22
+ 306:	70 95       	com	r23
+ 308:	80 95       	com	r24
+ 30a:	90 95       	com	r25
+ 30c:	9b 01       	movw	r18, r22
+ 30e:	ac 01       	movw	r20, r24
+ 310:	bd 01       	movw	r22, r26
+ 312:	cf 01       	movw	r24, r30
+ 314:	08 95       	ret
 
-0000018e <__udivmodsi4_ep>:
- 18e:	66 1f       	adc	r22, r22
- 190:	77 1f       	adc	r23, r23
- 192:	88 1f       	adc	r24, r24
- 194:	99 1f       	adc	r25, r25
- 196:	1a 94       	dec	r1
- 198:	69 f7       	brne	.-38     	; 0x174 <__udivmodsi4_loop>
- 19a:	60 95       	com	r22
- 19c:	70 95       	com	r23
- 19e:	80 95       	com	r24
- 1a0:	90 95       	com	r25
- 1a2:	9b 01       	movw	r18, r22
- 1a4:	ac 01       	movw	r20, r24
- 1a6:	bd 01       	movw	r22, r26
- 1a8:	cf 01       	movw	r24, r30
- 1aa:	08 95       	ret
+00000316 <__umulhisi3>:
+ 316:	a2 9f       	mul	r26, r18
+ 318:	b0 01       	movw	r22, r0
+ 31a:	b3 9f       	mul	r27, r19
+ 31c:	c0 01       	movw	r24, r0
+ 31e:	a3 9f       	mul	r26, r19
+ 320:	70 0d       	add	r23, r0
+ 322:	81 1d       	adc	r24, r1
+ 324:	11 24       	eor	r1, r1
+ 326:	91 1d       	adc	r25, r1
+ 328:	b2 9f       	mul	r27, r18
+ 32a:	70 0d       	add	r23, r0
+ 32c:	81 1d       	adc	r24, r1
+ 32e:	11 24       	eor	r1, r1
+ 330:	91 1d       	adc	r25, r1
+ 332:	08 95       	ret
 
-000001ac <_exit>:
- 1ac:	f8 94       	cli
+00000334 <_exit>:
+ 334:	f8 94       	cli
 
-000001ae <__stop_program>:
- 1ae:	ff cf       	rjmp	.-2      	; 0x1ae <__stop_program>
+00000336 <__stop_program>:
+ 336:	ff cf       	rjmp	.-2      	; 0x336 <__stop_program>

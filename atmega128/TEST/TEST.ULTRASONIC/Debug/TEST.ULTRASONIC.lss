@@ -23,11 +23,11 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING
   9 .debug_frame  00000100  00000000  00000000  00002368  2**2
                   CONTENTS, READONLY, DEBUGGING
- 10 .debug_str    000004e4  00000000  00000000  00002468  2**0
+ 10 .debug_str    000004e3  00000000  00000000  00002468  2**0
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_loc    000001be  00000000  00000000  0000294c  2**0
+ 11 .debug_loc    000001be  00000000  00000000  0000294b  2**0
                   CONTENTS, READONLY, DEBUGGING
- 12 .debug_ranges 00000058  00000000  00000000  00002b0a  2**0
+ 12 .debug_ranges 00000058  00000000  00000000  00002b09  2**0
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -157,10 +157,10 @@ void UART0_init(void)
     UBRR0L = (unsigned char)UBRR_VALUE;
   cc:	87 e6       	ldi	r24, 0x67	; 103
   ce:	89 b9       	out	0x09, r24	; 9
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0);      /* 송수신 Enable */
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0);      // 송수신 Enable 
   d0:	88 e1       	ldi	r24, 0x18	; 24
   d2:	8a b9       	out	0x0a, r24	; 10
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);    /* 8N1 */
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);    // 8N1 
   d4:	86 e0       	ldi	r24, 0x06	; 6
   d6:	80 93 95 00 	sts	0x0095, r24	; 0x800095 <__TEXT_REGION_LENGTH__+0x7e0095>
   da:	08 95       	ret
@@ -170,7 +170,7 @@ void UART0_init(void)
 
 void UART0_transmit(unsigned char data)
 {
-    while (!(UCSR0A & (1 << UDRE0)));  /* 송신 버퍼 비었는지 대기 */
+    while (!(UCSR0A & (1 << UDRE0)));  // 송신 버퍼 비었는지 대기
   dc:	5d 9b       	sbis	0x0b, 5	; 11
   de:	fe cf       	rjmp	.-4      	; 0xdc <UART0_transmit>
     UDR0 = data;
@@ -207,26 +207,26 @@ void UART0_print(const char *str)
   fa:	08 95       	ret
 
 000000fc <ECHO_INT2_init>:
-volatile uint8_t  timer1_ovf      = 0;   /* Timer1 오버플로우(타임아웃) 플래그 */
+volatile uint8_t  timer1_ovf      = 0;   // Timer1 오버플로우(타임아웃) 플래그 
 
 /* ------------------- INT2 (PD2, ECHO) 초기화 ------------------- */
 void ECHO_INT2_init(void)
 {
-    DDRD  &= ~(1 << PD2);   /* PD2 입력 (ECHO) */
+    DDRD  &= ~(1 << PD2);   // PD2 입력 (ECHO) 
   fc:	81 b3       	in	r24, 0x11	; 17
   fe:	8b 7f       	andi	r24, 0xFB	; 251
  100:	81 bb       	out	0x11, r24	; 17
 
     /* EICRA: INT2 sense control (ISC21:ISC20)
      * 11 = 상승엣지, 10 = 하강엣지 */
-    EICRA |= (1 << ISC21) | (1 << ISC20);  /* 처음엔 상승엣지 대기 */
+    EICRA |= (1 << ISC21) | (1 << ISC20);  // 처음엔 상승엣지 대기
  102:	ea e6       	ldi	r30, 0x6A	; 106
  104:	f0 e0       	ldi	r31, 0x00	; 0
  106:	80 81       	ld	r24, Z
  108:	80 63       	ori	r24, 0x30	; 48
  10a:	80 83       	st	Z, r24
 
-    EIMSK |= (1 << INT2);   /* INT2 인터럽트 Enable */
+    EIMSK |= (1 << INT2);   // INT2 인터럽트 Enable
  10c:	89 b7       	in	r24, 0x39	; 57
  10e:	84 60       	ori	r24, 0x04	; 4
  110:	89 bf       	out	0x39, r24	; 57
@@ -238,11 +238,11 @@ void ECHO_INT2_init(void)
 /* ------------------- TRIG (PD4) 초기화 ------------------- */
 void TRIG_init(void)
 {
-    DDRD  |= (1 << PD4);    /* PD4 출력 (TRIG) */
+    DDRD  |= (1 << PD4);    // PD4 출력 (TRIG)
  114:	81 b3       	in	r24, 0x11	; 17
  116:	80 61       	ori	r24, 0x10	; 16
  118:	81 bb       	out	0x11, r24	; 17
-    PORTD &= ~(1 << PD4);   /* 초기 LOW */
+    PORTD &= ~(1 << PD4);   // 초기 LOW 
  11a:	82 b3       	in	r24, 0x12	; 18
  11c:	8f 7e       	andi	r24, 0xEF	; 239
  11e:	82 bb       	out	0x12, r24	; 18
@@ -256,10 +256,10 @@ void Timer1_init(void)
 {
     TCCR1A = 0x00;
  122:	1f bc       	out	0x2f, r1	; 47
-    TCCR1B = (1 << CS11);   /* 분주비 8 -> 0.5us/tick @16MHz */
+    TCCR1B = (1 << CS11);   // 분주비 8 -> 0.5us/tick @16MHz 
  124:	82 e0       	ldi	r24, 0x02	; 2
  126:	8e bd       	out	0x2e, r24	; 46
-    TIMSK  |= (1 << TOIE1); /* Timer1 오버플로우 인터럽트 Enable (타임아웃 검출용) */
+    TIMSK  |= (1 << TOIE1); // Timer1 오버플로우 인터럽트 Enable (타임아웃 검출용)
  128:	87 b7       	in	r24, 0x37	; 55
  12a:	84 60       	ori	r24, 0x04	; 4
  12c:	87 bf       	out	0x37, r24	; 55
@@ -286,7 +286,7 @@ ISR(INT2_vect)
  146:	80 91 64 01 	lds	r24, 0x0164	; 0x800164 <echo_edge_state>
  14a:	81 11       	cpse	r24, r1
  14c:	0e c0       	rjmp	.+28     	; 0x16a <__vector_3+0x3a>
-        /* 상승엣지 감지: 타이머 리셋 후 하강엣지 대기로 전환 */
+        // 상승엣지 감지: 타이머 리셋 후 하강엣지 대기로 전환
         TCNT1 = 0;
  14e:	1d bc       	out	0x2d, r1	; 45
  150:	1c bc       	out	0x2c, r1	; 44
@@ -295,7 +295,7 @@ ISR(INT2_vect)
         echo_edge_state = 1;
  156:	81 e0       	ldi	r24, 0x01	; 1
  158:	80 93 64 01 	sts	0x0164, r24	; 0x800164 <echo_edge_state>
-        EICRA = (EICRA & ~(1 << ISC20)) | (1 << ISC21); /* 10: 하강엣지 */
+        EICRA = (EICRA & ~(1 << ISC20)) | (1 << ISC21); // 10: 하강엣지
  15c:	ea e6       	ldi	r30, 0x6A	; 106
  15e:	f0 e0       	ldi	r31, 0x00	; 0
  160:	80 81       	ld	r24, Z
@@ -304,7 +304,7 @@ ISR(INT2_vect)
  166:	80 83       	st	Z, r24
  168:	10 c0       	rjmp	.+32     	; 0x18a <__vector_3+0x5a>
     } else {
-        /* 하강엣지 감지: 펄스폭(타이머 값) 캡처 */
+        // 하강엣지 감지: 펄스폭(타이머 값) 캡처
         echo_ticks = TCNT1;
  16a:	8c b5       	in	r24, 0x2c	; 44
  16c:	9d b5       	in	r25, 0x2d	; 45
@@ -315,7 +315,7 @@ ISR(INT2_vect)
  178:	80 93 61 01 	sts	0x0161, r24	; 0x800161 <echo_done>
         echo_edge_state = 0;
  17c:	10 92 64 01 	sts	0x0164, r1	; 0x800164 <echo_edge_state>
-        EICRA |= (1 << ISC21) | (1 << ISC20);            /* 11: 상승엣지로 복귀 */
+        EICRA |= (1 << ISC21) | (1 << ISC20);            // 11: 상승엣지로 복귀
  180:	ea e6       	ldi	r30, 0x6A	; 106
  182:	f0 e0       	ldi	r31, 0x00	; 0
  184:	80 81       	ld	r24, Z
@@ -420,7 +420,6 @@ int main(void)
  1f8:	10 92 61 01 	sts	0x0161, r1	; 0x800161 <echo_done>
 
     while (1) {
-        /* 측정 준비 */
         echo_done  = 0;
  1fc:	10 92 60 01 	sts	0x0160, r1	; 0x800160 <__data_end>
         timer1_ovf = 0;
@@ -428,7 +427,7 @@ int main(void)
         echo_edge_state = 0;
  204:	ea e6       	ldi	r30, 0x6A	; 106
  206:	f0 e0       	ldi	r31, 0x00	; 0
-        EICRA |= (1 << ISC21) | (1 << ISC20);  /* 상승엣지 대기 상태로 초기화 */
+        EICRA |= (1 << ISC21) | (1 << ISC20);  
  208:	80 81       	ld	r24, Z
  20a:	80 63       	ori	r24, 0x30	; 48
  20c:	80 83       	st	Z, r24
@@ -437,7 +436,6 @@ int main(void)
         trigger_pulse();
  210:	80 91 61 01 	lds	r24, 0x0161	; 0x800161 <echo_done>
 
-        /* ECHO 캡처 완료 또는 타임아웃(오버플로우) 대기 */
         while (!echo_done && !timer1_ovf) {
  214:	81 11       	cpse	r24, r1
  216:	04 c0       	rjmp	.+8      	; 0x220 <main+0x4c>
@@ -445,7 +443,7 @@ int main(void)
  21c:	88 23       	and	r24, r24
  21e:	c1 f3       	breq	.-16     	; 0x210 <main+0x3c>
  220:	80 91 61 01 	lds	r24, 0x0161	; 0x800161 <echo_done>
-            ; /* busy wait */
+            ; 
         }
 
         if (echo_done) {
