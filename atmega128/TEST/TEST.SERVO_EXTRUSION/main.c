@@ -10,10 +10,11 @@
  *   - 외부 버튼 -> PD0 (내부 풀업 사용, 버튼 누르면 GND로 연결되어 LOW)
  *   - UART0 TX -> PE1, RX -> PE0 (9600bps, 8N1)
  *
- * 동작:
+ * 동작 (알약 압출용):
  *   - 리셋 버튼을 누르거나 전원이 인가될 때 최초 각도: 180도
- *   - 버튼 1회 입력: 180도 -> 50도 (130도 이동)
- *   - 이후 버튼 입력마다 5도씩 감소 (45, 40, ... 0도)
+ *   - 버튼 1회 입력: 180도 -> 50도로 즉시 이동 (130도 이동)
+ *   - 이후 별도 입력 없이 자동으로 0.5초 간격 1도씩 감소 (49, 48, ... 0도)
+ *     -> 알약을 지긋이 눌러 압출
  *   - 0도 도달 후에는 버튼을 눌러도 더 이상 이동하지 않음
  *   - 각도가 바뀔 때마다 UART로 현재 각도 출력
  *
@@ -41,6 +42,7 @@
 #define ANGLE_AFTER_1ST 50u
 #define ANGLE_STEP      5u
 #define ANGLE_MAX       0u
+#define ANGLE_STEP_DELAY_MS 500u   // 압출 단계 간격 (0.5초)
 
 // 서보 펄스폭 범위 (us) - MG996R 실측 후 조정 권장
 #define PULSE_MIN_US    500u    // 0도
@@ -150,15 +152,18 @@ int main(void)
         {
             if (current_angle == ANGLE_INIT)
             {
-                current_angle = ANGLE_AFTER_1ST;    // 180 -> 50 (130도 이동)
+                current_angle = ANGLE_AFTER_1ST;    // 180 -> 50 (130도 즉시 이동)
                 Servo_SetPulse(Angle_ToPulse(current_angle));
                 UART_PrintAngle(current_angle);
-            }
-            else if (current_angle >= ANGLE_STEP)
-            {
-                current_angle -= ANGLE_STEP;        // 이후 5도씩 감소
-                Servo_SetPulse(Angle_ToPulse(current_angle));
-                UART_PrintAngle(current_angle);
+
+                // 이후 0.5초 간격으로 1도씩 감소시키며 0도까지 압출
+                while (current_angle > ANGLE_MAX)
+                {
+                    _delay_ms(ANGLE_STEP_DELAY_MS);
+                    current_angle -= ANGLE_STEP;
+                    Servo_SetPulse(Angle_ToPulse(current_angle));
+                    UART_PrintAngle(current_angle);
+                }
             }
             // current_angle == ANGLE_MAX(0)이면 더 이상 이동하지 않음
         }
