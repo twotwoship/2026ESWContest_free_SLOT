@@ -139,7 +139,25 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="eeprom_state.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="eeprom_state.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="fsm.c">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="main.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart_driver.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart_protocol.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart_protocol.h">
       <SubType>compile</SubType>
     </Compile>
   </ItemGroup>

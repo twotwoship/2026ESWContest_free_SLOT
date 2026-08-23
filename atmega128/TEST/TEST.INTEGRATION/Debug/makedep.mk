@@ -2,13 +2,5 @@
 # Automatically-generated file. Do not edit or delete the file
 ################################################################################
 
-eeprom_state.c
-
-fsm.c
-
 main.c
-
-uart_driver.c
-
-uart_protocol.c
 

@@ -1,55 +1,37 @@
-/*
- * TEST.UART.c
- *
- * Created: 2026-08-02 오전 9:51:41
- * Author : kccistc
- */ 
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include "uart_protocol.h"
+#include "eeprom_state.h"
 
-#define BAUD 9600
-#define UBRR_VAL ((F_CPU/16/BAUD)-1)
+// 부팅 시 로드된 영속 상태 - fsm.c에서도 참조할 수 있도록 전역으로 둔다
+PersistState_t g_persist_state;
 
-volatile uint8_t rx_data;
-volatile uint8_t rx_flag = 0;
-
-
-void UART0_init(void) {
-	UBRR0H = (uint8_t)(UBRR_VAL >> 8);
-	UBRR0L = (uint8_t)UBRR_VAL;
-
-	// RX 인터럽트, RX/TX 활성화
-	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
-
-	// 8N1
-	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
-}
-
-void UART0_transmit(uint8_t data) {
-	while(!(UCSR0A & (1 << UDRE0)));
-	UDR0 = data;
-}
-
-void UART0_sendString(const char *str) {
-	while (*str) UART0_transmit(*str++);
-}
-
-ISR(USART0_RX_vect) {
-	rx_data = UDR0;   // UDR0 읽는 순간 RXC0 플래그 자동 클리어
-	rx_flag = 1;
-}
-
-int main(void) {
-	UART0_init();
+int main(void)
+{
+	UART0_Init(9600);
 	sei();
 
-	while (1) {
-		if (rx_flag) {
-			rx_flag = 0;
+	// 부팅 시 EEPROM 상태 로드 (명세서 6.3, 10번 AT-14)
+	uint8_t loaded = EEPROM_LoadState(&g_persist_state);
 
-			UART0_sendString("ACK");  // 수신 완료 메시지 회신
+	if (loaded)
+	{
+		uint32_t recovery_req_id;
+		if (Recovery_CheckOnBoot(&g_persist_state, &recovery_req_id))
+		{
+			// MOVING/DISPENSING 도중 리셋됨 - 자동 재구동 금지, RECOVERY_REQUIRED 통보
+			Send_ERROR(recovery_req_id, "RECOVERY_REQUIRED");
 		}
 	}
-}
+	// loaded == 0: 최초 부팅이거나 CRC 무효 - g_persist_state는 이미 기본값(NONE)으로 세팅됨
 
+	UART0_TxString("SLOT-GUARD ATmega128A Ready\r\n");
+
+	while (1)
+	{
+		Task_UartRxProcess();   // 링버퍼 -> 프레임 추출 -> 파싱 -> FSM 디스패치
+
+		// TODO: Task_MotorPoll();  모터/서보 진행 상태 폴링 (다음 단계)
+	}
+}

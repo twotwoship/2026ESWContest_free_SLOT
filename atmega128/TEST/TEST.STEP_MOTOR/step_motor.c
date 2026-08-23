@@ -1,4 +1,4 @@
-/*
+﻿/*
  * step_motor.c
  * 28BYJ-48 + ULN2003 스테퍼 모터 제어 (Full Drive 풀스텝)
  *

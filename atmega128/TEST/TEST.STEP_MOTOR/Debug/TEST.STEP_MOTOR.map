@@ -513,13 +513,13 @@ END GROUP
  .debug_frame   0x00000000      0x110 main.o
  .debug_frame   0x00000110       0x90 step_motor.o
 
-.debug_str      0x00000000      0x56d
+.debug_str      0x00000000      0x5bc
  *(.debug_str)
  .debug_str     0x00000000      0x27d C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51/crtatmega128a.o
  .debug_str     0x0000027d      0x279 main.o
                                 0x2b2 (size before relaxing)
- .debug_str     0x000004f6       0x77 step_motor.o
-                                0x24c (size before relaxing)
+ .debug_str     0x000004f6       0xc6 step_motor.o
+                                0x262 (size before relaxing)
 
 .debug_loc      0x00000000      0x397
  *(.debug_loc)

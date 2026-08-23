@@ -23,11 +23,11 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY, DEBUGGING
   9 .debug_frame  000001a0  00000000  00000000  00002500  2**2
                   CONTENTS, READONLY, DEBUGGING
- 10 .debug_str    0000056d  00000000  00000000  000026a0  2**0
+ 10 .debug_str    000005bc  00000000  00000000  000026a0  2**0
                   CONTENTS, READONLY, DEBUGGING
- 11 .debug_loc    00000397  00000000  00000000  00002c0d  2**0
+ 11 .debug_loc    00000397  00000000  00000000  00002c5c  2**0
                   CONTENTS, READONLY, DEBUGGING
- 12 .debug_ranges 000000a0  00000000  00000000  00002fa4  2**0
+ 12 .debug_ranges 000000a0  00000000  00000000  00002ff3  2**0
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -147,107 +147,53 @@ Disassembly of section .text:
   c6:	9c cf       	rjmp	.-200    	; 0x0 <__vectors>
 
 000000c8 <Timer2_Init>:
- */
-static volatile uint16_t g_tick_ms = 0;
-
-static void Timer2_Init(void)
-{
-	TCCR2 = (1 << WGM21) | (1 << CS21) | (1 << CS20);   // CTC 모드, prescaler 64
   c8:	8b e0       	ldi	r24, 0x0B	; 11
   ca:	85 bd       	out	0x25, r24	; 37
-	OCR2  = 249;                                          // 250카운트 -> 1ms
   cc:	89 ef       	ldi	r24, 0xF9	; 249
   ce:	83 bd       	out	0x23, r24	; 35
-	TIMSK |= (1 << OCIE2);
   d0:	87 b7       	in	r24, 0x37	; 55
   d2:	80 68       	ori	r24, 0x80	; 128
   d4:	87 bf       	out	0x37, r24	; 55
   d6:	08 95       	ret
 
 000000d8 <get_tick_safe>:
-}
-
-static uint16_t get_tick_safe(void)
-{
-	uint16_t t;
-	cli();
   d8:	f8 94       	cli
-	t = g_tick_ms;
   da:	80 91 9c 01 	lds	r24, 0x019C	; 0x80019c <g_tick_ms>
   de:	90 91 9d 01 	lds	r25, 0x019D	; 0x80019d <g_tick_ms+0x1>
-	sei();
   e2:	78 94       	sei
-	return t;
-}
   e4:	08 95       	ret
 
 000000e6 <UART0_Init>:
-
-static void UART0_Init(void)
-{
-	uint16_t ubrr = (F_CPU / 16 / UART0_BAUD) - 1;
-
-	UBRR0H = (uint8_t)(ubrr >> 8);
   e6:	10 92 90 00 	sts	0x0090, r1	; 0x800090 <__TEXT_REGION_LENGTH__+0x7e0090>
-	UBRR0L = (uint8_t)ubrr;
   ea:	87 e6       	ldi	r24, 0x67	; 103
   ec:	89 b9       	out	0x09, r24	; 9
-
-	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
   ee:	88 e9       	ldi	r24, 0x98	; 152
   f0:	8a b9       	out	0x0a, r24	; 10
-	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
   f2:	86 e0       	ldi	r24, 0x06	; 6
   f4:	80 93 95 00 	sts	0x0095, r24	; 0x800095 <__TEXT_REGION_LENGTH__+0x7e0095>
   f8:	08 95       	ret
 
 000000fa <UART0_TxChar>:
-}
-
-static void UART0_TxChar(char c)
-{
-	while (!(UCSR0A & (1 << UDRE0)));
   fa:	5d 9b       	sbis	0x0b, 5	; 11
   fc:	fe cf       	rjmp	.-4      	; 0xfa <UART0_TxChar>
-	UDR0 = c;
   fe:	8c b9       	out	0x0c, r24	; 12
  100:	08 95       	ret
 
 00000102 <UART0_TxString>:
-}
-
-static void UART0_TxString(const char *str)
-{
  102:	cf 93       	push	r28
  104:	df 93       	push	r29
  106:	ec 01       	movw	r28, r24
-	while (*str)
  108:	02 c0       	rjmp	.+4      	; 0x10e <UART0_TxString+0xc>
-	{
-		UART0_TxChar(*str++);
  10a:	21 96       	adiw	r28, 0x01	; 1
  10c:	f6 df       	rcall	.-20     	; 0xfa <UART0_TxChar>
-	UDR0 = c;
-}
-
-static void UART0_TxString(const char *str)
-{
-	while (*str)
  10e:	88 81       	ld	r24, Y
  110:	81 11       	cpse	r24, r1
  112:	fb cf       	rjmp	.-10     	; 0x10a <UART0_TxString+0x8>
-	{
-		UART0_TxChar(*str++);
-	}
-}
  114:	df 91       	pop	r29
  116:	cf 91       	pop	r28
  118:	08 95       	ret
 
 0000011a <UART0_TxUint16>:
-
-static void UART0_TxUint16(uint16_t num)
-{
  11a:	1f 93       	push	r17
  11c:	cf 93       	push	r28
  11e:	df 93       	push	r29
@@ -257,23 +203,11 @@ static void UART0_TxUint16(uint16_t num)
  126:	cd b7       	in	r28, 0x3d	; 61
  128:	de b7       	in	r29, 0x3e	; 62
  12a:	ac 01       	movw	r20, r24
-	char buf[6];
-	uint8_t i = 0;
-
-	if (num == 0)
  12c:	89 2b       	or	r24, r25
  12e:	79 f5       	brne	.+94     	; 0x18e <UART0_TxUint16+0x74>
-	{
-		UART0_TxChar('0');
  130:	80 e3       	ldi	r24, 0x30	; 48
  132:	e3 df       	rcall	.-58     	; 0xfa <UART0_TxChar>
  134:	3c c0       	rjmp	.+120    	; 0x1ae <UART0_TxUint16+0x94>
-		return;
-	}
-
-	while (num > 0)
-	{
-		buf[i++] = '0' + (num % 10);
  136:	9a 01       	movw	r18, r20
  138:	ad ec       	ldi	r26, 0xCD	; 205
  13a:	bc ec       	ldi	r27, 0xCC	; 204
@@ -307,7 +241,6 @@ static void UART0_TxUint16(uint16_t num)
  172:	f1 1d       	adc	r31, r1
  174:	80 5d       	subi	r24, 0xD0	; 208
  176:	80 83       	st	Z, r24
-		num /= 10;
  178:	9a 01       	movw	r18, r20
  17a:	0c d1       	rcall	.+536    	; 0x394 <__umulhisi3>
  17c:	ac 01       	movw	r20, r24
@@ -318,31 +251,13 @@ static void UART0_TxUint16(uint16_t num)
  186:	56 95       	lsr	r21
  188:	47 95       	ror	r20
  18a:	1f 5f       	subi	r17, 0xFF	; 255
-		return;
-	}
-
-	while (num > 0)
-	{
-		buf[i++] = '0' + (num % 10);
  18c:	01 c0       	rjmp	.+2      	; 0x190 <UART0_TxUint16+0x76>
  18e:	10 e0       	ldi	r17, 0x00	; 0
  190:	41 15       	cp	r20, r1
-	{
-		UART0_TxChar('0');
-		return;
-	}
-
-	while (num > 0)
  192:	51 05       	cpc	r21, r1
  194:	81 f6       	brne	.-96     	; 0x136 <UART0_TxUint16+0x1c>
  196:	09 c0       	rjmp	.+18     	; 0x1aa <UART0_TxUint16+0x90>
  198:	11 50       	subi	r17, 0x01	; 1
-		num /= 10;
-	}
-
-	while (i > 0)
-	{
-		UART0_TxChar(buf[--i]);
  19a:	e1 e0       	ldi	r30, 0x01	; 1
  19c:	f0 e0       	ldi	r31, 0x00	; 0
  19e:	ec 0f       	add	r30, r28
@@ -352,18 +267,8 @@ static void UART0_TxUint16(uint16_t num)
  1a6:	80 81       	ld	r24, Z
  1a8:	a8 df       	rcall	.-176    	; 0xfa <UART0_TxChar>
  1aa:	11 11       	cpse	r17, r1
-	{
-		buf[i++] = '0' + (num % 10);
-		num /= 10;
-	}
-
-	while (i > 0)
  1ac:	f5 cf       	rjmp	.-22     	; 0x198 <UART0_TxUint16+0x7e>
  1ae:	26 96       	adiw	r28, 0x06	; 6
-	{
-		UART0_TxChar(buf[--i]);
-	}
-}
  1b0:	0f b6       	in	r0, 0x3f	; 63
  1b2:	f8 94       	cli
  1b4:	de bf       	out	0x3e, r29	; 62
@@ -376,35 +281,14 @@ static void UART0_TxUint16(uint16_t num)
 
 000001c2 <UART0_KeyReady>:
  1c2:	80 91 9a 01 	lds	r24, 0x019A	; 0x80019a <__data_end>
-}
-
-static uint8_t UART0_KeyReady(void)
-{
-	return s_key_ready;
-}
  1c6:	08 95       	ret
 
 000001c8 <UART0_ReadKey>:
-
-static char UART0_ReadKey(void)
-{
-	char c = s_key_char;
  1c8:	80 91 9b 01 	lds	r24, 0x019B	; 0x80019b <s_key_char>
-
-	s_key_ready = 0;
  1cc:	10 92 9a 01 	sts	0x019A, r1	; 0x80019a <__data_end>
-
-	return c;
-}
  1d0:	08 95       	ret
 
 000001d2 <__vector_9>:
-	OCR2  = 249;                                          // 250카운트 -> 1ms
-	TIMSK |= (1 << OCIE2);
-}
-
-ISR(TIMER2_COMP_vect)
-{
  1d2:	1f 92       	push	r1
  1d4:	0f 92       	push	r0
  1d6:	0f b6       	in	r0, 0x3f	; 63
@@ -412,13 +296,11 @@ ISR(TIMER2_COMP_vect)
  1da:	11 24       	eor	r1, r1
  1dc:	8f 93       	push	r24
  1de:	9f 93       	push	r25
-	g_tick_ms++;
  1e0:	80 91 9c 01 	lds	r24, 0x019C	; 0x80019c <g_tick_ms>
  1e4:	90 91 9d 01 	lds	r25, 0x019D	; 0x80019d <g_tick_ms+0x1>
  1e8:	01 96       	adiw	r24, 0x01	; 1
  1ea:	90 93 9d 01 	sts	0x019D, r25	; 0x80019d <g_tick_ms+0x1>
  1ee:	80 93 9c 01 	sts	0x019C, r24	; 0x80019c <g_tick_ms>
-}
  1f2:	9f 91       	pop	r25
  1f4:	8f 91       	pop	r24
  1f6:	0f 90       	pop	r0
@@ -428,12 +310,6 @@ ISR(TIMER2_COMP_vect)
  1fe:	18 95       	reti
 
 00000200 <__vector_18>:
-	}
-}
-
-// 문자 1개를 받는 즉시 명령으로 확정 (Enter 불필요)
-ISR(USART0_RX_vect)
-{
  200:	1f 92       	push	r1
  202:	0f 92       	push	r0
  204:	0f b6       	in	r0, 0x3f	; 63
@@ -441,23 +317,13 @@ ISR(USART0_RX_vect)
  208:	11 24       	eor	r1, r1
  20a:	8f 93       	push	r24
  20c:	9f 93       	push	r25
-	char c = UDR0;
  20e:	9c b1       	in	r25, 0x0c	; 12
-
-	if (s_key_ready)
  210:	80 91 9a 01 	lds	r24, 0x019A	; 0x80019a <__data_end>
  214:	81 11       	cpse	r24, r1
  216:	05 c0       	rjmp	.+10     	; 0x222 <__vector_18+0x22>
-	{
-		return; // 이전 키가 아직 처리되지 않음
-	}
-
-	s_key_char  = c;
  218:	90 93 9b 01 	sts	0x019B, r25	; 0x80019b <s_key_char>
-	s_key_ready = 1;
  21c:	81 e0       	ldi	r24, 0x01	; 1
  21e:	80 93 9a 01 	sts	0x019A, r24	; 0x80019a <__data_end>
-}
  222:	9f 91       	pop	r25
  224:	8f 91       	pop	r24
  226:	0f 90       	pop	r0
@@ -467,137 +333,75 @@ ISR(USART0_RX_vect)
  22e:	18 95       	reti
 
 00000230 <main>:
-}
-
-/* ================= main ================= */
-int main(void)
-{
-	UART0_Init();
  230:	5a df       	rcall	.-332    	; 0xe6 <UART0_Init>
-	Timer2_Init();
  232:	4a df       	rcall	.-364    	; 0xc8 <Timer2_Init>
-	Stepper_Init();
  234:	4a d0       	rcall	.+148    	; 0x2ca <Stepper_Init>
  236:	78 94       	sei
-	sei();
-
-	UART0_TxString("Step Calibration Mode\r\n");
  238:	80 e0       	ldi	r24, 0x00	; 0
  23a:	91 e0       	ldi	r25, 0x01	; 1
  23c:	62 df       	rcall	.-316    	; 0x102 <UART0_TxString>
-	UART0_TxString("g=forward run, r=reverse run, SPACE=stop & report\r\n");
  23e:	88 e1       	ldi	r24, 0x18	; 24
  240:	91 e0       	ldi	r25, 0x01	; 1
  242:	5f df       	rcall	.-322    	; 0x102 <UART0_TxString>
-
-	uint16_t run_start_tick = 0;
  244:	00 e0       	ldi	r16, 0x00	; 0
-
-	while (1)
-	{
-		uint16_t now = get_tick_safe();
  246:	10 e0       	ldi	r17, 0x00	; 0
  248:	47 df       	rcall	.-370    	; 0xd8 <get_tick_safe>
-
-		Stepper_Update(now);
  24a:	ec 01       	movw	r28, r24
  24c:	56 d0       	rcall	.+172    	; 0x2fa <Stepper_Update>
-
-		if (UART0_KeyReady())
  24e:	b9 df       	rcall	.-142    	; 0x1c2 <UART0_KeyReady>
  250:	88 23       	and	r24, r24
  252:	d1 f3       	breq	.-12     	; 0x248 <main+0x18>
-		{
-			char key = UART0_ReadKey();
  254:	b9 df       	rcall	.-142    	; 0x1c8 <UART0_ReadKey>
  256:	87 36       	cpi	r24, 0x67	; 103
-
-			if (key == 'g' || key == 'G')
  258:	11 f0       	breq	.+4      	; 0x25e <main+0x2e>
  25a:	87 34       	cpi	r24, 0x47	; 71
  25c:	41 f4       	brne	.+16     	; 0x26e <main+0x3e>
-			{
-				Stepper_StartContinuous(0, now);
  25e:	be 01       	movw	r22, r28
  260:	80 e0       	ldi	r24, 0x00	; 0
  262:	3e d0       	rcall	.+124    	; 0x2e0 <Stepper_StartContinuous>
  264:	8c e4       	ldi	r24, 0x4C	; 76
-				run_start_tick = now;
-				UART0_TxString("RUN FORWARD...\r\n");
  266:	91 e0       	ldi	r25, 0x01	; 1
  268:	4c df       	rcall	.-360    	; 0x102 <UART0_TxString>
  26a:	8e 01       	movw	r16, r28
  26c:	ed cf       	rjmp	.-38     	; 0x248 <main+0x18>
-			}
-			else if (key == 'r' || key == 'R')
  26e:	82 37       	cpi	r24, 0x72	; 114
  270:	11 f0       	breq	.+4      	; 0x276 <main+0x46>
  272:	82 35       	cpi	r24, 0x52	; 82
-			{
-				Stepper_StartContinuous(1, now);
  274:	41 f4       	brne	.+16     	; 0x286 <main+0x56>
  276:	be 01       	movw	r22, r28
  278:	81 e0       	ldi	r24, 0x01	; 1
-				run_start_tick = now;
-				UART0_TxString("RUN REVERSE...\r\n");
  27a:	32 d0       	rcall	.+100    	; 0x2e0 <Stepper_StartContinuous>
  27c:	8d e5       	ldi	r24, 0x5D	; 93
  27e:	91 e0       	ldi	r25, 0x01	; 1
  280:	40 df       	rcall	.-384    	; 0x102 <UART0_TxString>
-				UART0_TxString("RUN FORWARD...\r\n");
-			}
-			else if (key == 'r' || key == 'R')
-			{
-				Stepper_StartContinuous(1, now);
-				run_start_tick = now;
  282:	8e 01       	movw	r16, r28
-				UART0_TxString("RUN REVERSE...\r\n");
-			}
-			else if (key == ' ')
  284:	e1 cf       	rjmp	.-62     	; 0x248 <main+0x18>
-			{
-				if (Stepper_IsMoving())
  286:	80 32       	cpi	r24, 0x20	; 32
  288:	f9 f6       	brne	.-66     	; 0x248 <main+0x18>
  28a:	7c d0       	rcall	.+248    	; 0x384 <Stepper_IsMoving>
-				{
-					Stepper_Stop();
  28c:	88 23       	and	r24, r24
-
-					uint16_t steps   = Stepper_GetStepCount();
  28e:	99 f0       	breq	.+38     	; 0x2b6 <main+0x86>
  290:	31 d0       	rcall	.+98     	; 0x2f4 <Stepper_Stop>
-					uint16_t elapsed = (uint16_t)(now - run_start_tick);
  292:	7b d0       	rcall	.+246    	; 0x38a <Stepper_GetStepCount>
  294:	7c 01       	movw	r14, r24
-
-					UART0_TxString("STOP: steps=");
  296:	c0 1b       	sub	r28, r16
  298:	d1 0b       	sbc	r29, r17
  29a:	8e e6       	ldi	r24, 0x6E	; 110
-					UART0_TxUint16(steps);
  29c:	91 e0       	ldi	r25, 0x01	; 1
  29e:	31 df       	rcall	.-414    	; 0x102 <UART0_TxString>
  2a0:	c7 01       	movw	r24, r14
-					UART0_TxString(" time=");
  2a2:	3b df       	rcall	.-394    	; 0x11a <UART0_TxUint16>
  2a4:	8b e7       	ldi	r24, 0x7B	; 123
  2a6:	91 e0       	ldi	r25, 0x01	; 1
  2a8:	2c df       	rcall	.-424    	; 0x102 <UART0_TxString>
-					UART0_TxUint16(elapsed);
  2aa:	ce 01       	movw	r24, r28
  2ac:	36 df       	rcall	.-404    	; 0x11a <UART0_TxUint16>
  2ae:	82 e8       	ldi	r24, 0x82	; 130
-					UART0_TxString(" ms\r\n");
  2b0:	91 e0       	ldi	r25, 0x01	; 1
  2b2:	27 df       	rcall	.-434    	; 0x102 <UART0_TxString>
  2b4:	c9 cf       	rjmp	.-110    	; 0x248 <main+0x18>
  2b6:	88 e8       	ldi	r24, 0x88	; 136
  2b8:	91 e0       	ldi	r25, 0x01	; 1
-				}
-				else
-				{
-					UART0_TxString("NOT RUNNING\r\n");
  2ba:	23 df       	rcall	.-442    	; 0x102 <UART0_TxString>
  2bc:	c5 cf       	rjmp	.-118    	; 0x248 <main+0x18>
 
