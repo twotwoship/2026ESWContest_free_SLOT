@@ -251,7 +251,6 @@ void Send_ACK(uint32_t req_id, const char *cmd_name)
 {
 	char id_str[9];
 	Uint32ToHex8(req_id, id_str);
-
 	UART0_TxString("ACK|");
 	UART0_TxString(id_str);
 	UART0_TxChar('|');
