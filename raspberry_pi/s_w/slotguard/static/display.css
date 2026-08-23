@@ -42,13 +42,13 @@ body {
 
 .lcd-brand {
     overflow: hidden;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 900;
     white-space: nowrap;
 }
 
 .lcd-clock {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 900;
     font-variant-numeric: tabular-nums;
 }
@@ -61,7 +61,7 @@ body {
     background: #075985;
     color: #ffffff;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 900;
     white-space: nowrap;
     cursor: pointer;
@@ -77,21 +77,20 @@ body {
 }
 
 .lcd-device-state {
-    padding: 4px 8px;
-    border: 2px solid #475569;
-    border-radius: 6px;
+    padding: 4px 2px;
+    border: 0;
+    background: transparent;
     color: #cbd5e1;
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 15px;
+    font-weight: 900;
+    white-space: nowrap;
 }
 
 .lcd-device-state.is-ok {
-    border-color: #22c55e;
     color: #86efac;
 }
 
 .lcd-device-state.is-error {
-    border-color: #f97316;
     color: #fed7aa;
 }
 
@@ -128,16 +127,9 @@ body {
 
 .lcd-home {
     display: grid;
-    grid-template-columns: minmax(0, 1.8fr) minmax(145px, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     height: 100%;
-}
-
-.lcd-home-left {
-    display: grid;
-    grid-template-rows: 1fr 92px;
-    gap: 7px;
-    min-width: 0;
 }
 
 .lcd-next,
@@ -152,66 +144,101 @@ body {
 
 .lcd-next {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    min-width: 0;
+    padding: 10px;
+}
+
+.lcd-next-header {
+    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+}
+
+.lcd-next-details {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    text-align: center;
 }
 
 .lcd-kicker {
     color: #7dd3fc;
-    font-size: 14px;
-    font-weight: 800;
+    font-size: 18px;
+    font-weight: 900;
+    white-space: nowrap;
 }
 
 .lcd-medicine {
     overflow: hidden;
-    margin-top: 2px;
-    font-size: 24px;
+    display: -webkit-box;
+    width: 100%;
+    font-size: 28px;
     font-weight: 900;
     line-height: 1.1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
 }
 
 .lcd-next-time {
     color: #facc15;
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 900;
     line-height: 1;
     text-align: right;
 }
 
 .lcd-remaining {
-    margin-top: 4px;
+    margin-top: 12px;
     color: #e2e8f0;
-    font-size: 14px;
-    font-weight: 700;
-    text-align: right;
+    font-size: 17px;
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: center;
 }
 
 .lcd-records {
-    padding: 5px 8px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 6px;
+    min-width: 0;
+    padding: 8px;
 }
 
 .lcd-section-title {
-    margin: 0 0 4px;
-    color: #cbd5e1;
-    font-size: 13px;
+    margin: 0;
+    color: #f8fafc;
+    font-size: 20px;
     font-weight: 900;
+}
+
+.lcd-record-list {
+    display: grid;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    min-height: 0;
 }
 
 .lcd-record-row {
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    gap: 6px;
+    grid-template-columns: 92px minmax(40px, 1fr) auto;
+    gap: 4px;
     align-items: center;
-    height: 21px;
     border-top: 1px solid #334155;
-    font-size: 12px;
+    font-size: 14px;
+    font-weight: 800;
 }
 
-.lcd-record-row span:nth-child(2) {
+.lcd-record-row span:first-child {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.2px;
+}
+
+.lcd-record-row span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -219,6 +246,18 @@ body {
 
 .lcd-record-status {
     font-weight: 900;
+    white-space: nowrap;
+}
+
+.lcd-record-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    grid-row: 1 / -1;
+    border-top: 1px solid #334155;
+    color: #cbd5e1;
+    font-size: 20px;
+    font-weight: 800;
 }
 
 .lcd-record-status.is-good { color: #86efac; }
@@ -302,6 +341,53 @@ body {
     font-weight: 900;
 }
 
+.lcd-ready {
+    display: grid;
+    grid-template-rows: 40px minmax(0, 1fr);
+    gap: 6px;
+    align-items: stretch;
+    justify-content: stretch;
+    text-align: left;
+}
+
+.lcd-ready-info {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) auto;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+    padding: 0 8px;
+    background: #101e2f;
+}
+
+.lcd-ready-title,
+.lcd-ready-medicine,
+.lcd-ready-remaining {
+    overflow: hidden;
+    margin: 0;
+    font-weight: 900;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lcd-ready-title {
+    color: #f8fafc;
+    font-size: 20px;
+}
+
+.lcd-ready-medicine {
+    color: #facc15;
+    font-size: 18px;
+    text-align: center;
+}
+
+.lcd-ready-remaining {
+    color: #e2e8f0;
+    font-size: 16px;
+    text-align: right;
+}
+
 .lcd-icon {
     font-size: 42px;
     line-height: 1;
@@ -327,6 +413,16 @@ body {
     padding: 8px 20px;
     background: #047857;
     box-shadow: inset 0 0 0 2px #6ee7b7;
+}
+
+.lcd-dispense-button {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border-radius: 10px;
+    font-size: 44px;
 }
 
 .lcd-primary:active,
@@ -372,7 +468,7 @@ body {
 .lcd-nav button {
     min-height: 46px;
     background: #1e3a5f;
-    font-size: 16px;
+    font-size: 18px;
 }
 
 .lcd-nav button.is-active {

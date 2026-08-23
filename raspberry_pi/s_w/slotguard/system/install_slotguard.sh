@@ -27,6 +27,8 @@ fi
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 app_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 app_group=$(id -gn "$app_user")
+app_home=$(getent passwd "$app_user" | cut -d: -f6)
+app_uid=$(id -u "$app_user")
 service_temp=$(mktemp)
 sudoers_temp=$(mktemp)
 lightdm_temp=$(mktemp)
@@ -66,6 +68,13 @@ install -o root -g root -m 0755 \
     "$script_dir/slotguard-power" /usr/local/sbin/slotguard-power
 install -o root -g root -m 0755 \
     "$script_dir/slotguard-xsession" /usr/local/bin/slotguard-xsession
+install -d -o "$app_user" -g "$app_group" -m 0755 \
+    "$app_home/.config/wireplumber"
+install -d -o "$app_user" -g "$app_group" -m 0755 \
+    "$app_home/.config/wireplumber/wireplumber.conf.d"
+install -o "$app_user" -g "$app_group" -m 0644 \
+    "$script_dir/90-slotguard-volume.conf" \
+    "$app_home/.config/wireplumber/wireplumber.conf.d/90-slotguard-volume.conf"
 install -o root -g root -m 0644 \
     "$script_dir/slotguard.desktop" /usr/share/xsessions/slotguard.desktop
 install -d -o root -g root -m 0755 /etc/chromium/policies
@@ -110,6 +119,28 @@ fi
 
 systemctl daemon-reload
 systemctl enable slotguard.service
+
+if command -v amixer >/dev/null 2>&1; then
+    amixer -q -c Headphones sset PCM 100% unmute || :
+fi
+if command -v alsactl >/dev/null 2>&1; then
+    alsactl store || :
+fi
+
+if [ -S "/run/user/$app_uid/pipewire-0" ] && [ -x /usr/bin/wpctl ]; then
+    runuser -u "$app_user" -- \
+        env XDG_RUNTIME_DIR="/run/user/$app_uid" \
+        /usr/bin/wpctl settings \
+        device.routes.default-sink-volume 1.0 || :
+    runuser -u "$app_user" -- \
+        env XDG_RUNTIME_DIR="/run/user/$app_uid" \
+        /usr/bin/wpctl settings --save \
+        device.routes.default-sink-volume || :
+    runuser -u "$app_user" -- \
+        env XDG_RUNTIME_DIR="/run/user/$app_uid" \
+        /usr/bin/wpctl set-volume @DEFAULT_AUDIO_SINK@ 1.0 || :
+fi
+
 "$script_dir/install_time_helper.sh" "$app_user"
 
 echo "SLOT-GUARD 서비스·키오스크·전원 도우미 설치 완료"

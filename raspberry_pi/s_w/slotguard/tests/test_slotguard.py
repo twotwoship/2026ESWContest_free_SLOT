@@ -442,6 +442,36 @@ class SlotguardTestCase(unittest.TestCase):
         status = app.build_display_status()
         self.assertEqual(status["device"]["audio"], "DISABLED")
 
+    def test_display_status_returns_latest_three_records_across_dates(self):
+        record_ids = []
+        for day in range(15, 19):
+            schedule_id = self.create_schedule(f"2024-08-{day:02d} 11:13")
+            record_ids.append(schedule_id)
+            conn = database.connect_db()
+            conn.execute(
+                "UPDATE schedules SET status = 'DISPENSED', completed_at = ? "
+                "WHERE id = ?",
+                (f"2024-08-{day:02d} 11:13:00", schedule_id),
+            )
+            conn.commit()
+            conn.close()
+
+        with patch.object(app, "get_local_ip_address", return_value="192.168.0.2"):
+            status = app.build_display_status()
+
+        self.assertEqual(
+            [record["id"] for record in status["recent_records"]],
+            list(reversed(record_ids[-3:])),
+        )
+        self.assertEqual(
+            [record["completed_at"] for record in status["recent_records"]],
+            [
+                "2024-08-18 11:13:00",
+                "2024-08-17 11:13:00",
+                "2024-08-16 11:13:00",
+            ],
+        )
+
     def test_volume_test_uses_saved_step_and_rejects_mute(self):
         client = app.app.test_client()
         database.update_device_settings(2, 7, self.now_seconds())

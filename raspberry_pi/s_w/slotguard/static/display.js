@@ -76,12 +76,20 @@
         return schedule.scheduled_at.slice(11, 16);
     }
 
+    function recordDateTime(record) {
+        const value = record.completed_at || record.scheduled_at || "";
+        const matched = value.match(/^\d{4}-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        if (!matched) {
+            return "--일 --:--";
+        }
+        return `${Number(matched[2])}일 ${matched[3]}:${matched[4]}`;
+    }
+
     function recordRows(records) {
         if (!records.length) {
-            return '<div class="lcd-record-row"><span>--:--</span><span>오늘 기록 없음</span><span></span></div>';
+            return '<div class="lcd-record-empty">최근 기록 없음</div>';
         }
         return records.map((record) => {
-            const time = (record.completed_at || record.scheduled_at).slice(11, 16);
             const statusClass = record.status === "DISPENSED"
                 ? "is-good"
                 : record.status === "MANUALLY_COMPLETED"
@@ -89,7 +97,7 @@
                     : "is-bad";
             return `
                 <div class="lcd-record-row">
-                    <span>${escapeHtml(time)}</span>
+                    <span>${escapeHtml(recordDateTime(record))}</span>
                     <span>${escapeHtml(record.medicine_name)}</span>
                     <span class="lcd-record-status ${statusClass}">
                         ${escapeHtml(statusLabels[record.status] || record.status)}
@@ -131,27 +139,26 @@
                 ? `${Math.ceil(seconds / 86400)}일 후`
                 : formatRemaining(seconds);
         }
+        const remainingHtml = next
+            ? escapeHtml(remaining)
+            : "관리자 웹에서<br>예약해 주세요";
         screen.innerHTML = `
             <section class="lcd-home">
-                <div class="lcd-home-left">
-                    <div class="lcd-next">
-                        <div>
-                            <div class="lcd-kicker">다음 복약</div>
-                            <div class="lcd-medicine">${escapeHtml(medicine)}</div>
-                        </div>
-                        <div>
-                            <div class="lcd-next-time">${escapeHtml(nextTimeText(next))}</div>
-                            <div class="lcd-remaining">${escapeHtml(remaining)}</div>
-                        </div>
+                <div class="lcd-next">
+                    <div class="lcd-next-header">
+                        <div class="lcd-kicker">다음 등록 일정</div>
+                        <div class="lcd-next-time">${escapeHtml(nextTimeText(next))}</div>
                     </div>
-                    <div class="lcd-records">
-                        <h2 class="lcd-section-title">오늘 최근 기록</h2>
-                        ${recordRows(status.recent_records)}
+                    <div class="lcd-next-details">
+                        <div class="lcd-medicine">${escapeHtml(medicine)}</div>
+                        <div class="lcd-remaining">${remainingHtml}</div>
                     </div>
                 </div>
-                <div class="lcd-slots-panel">
-                    <div class="lcd-target-label">다음 ${slotNumber(status.target_coordinate)}번 슬롯</div>
-                    ${slotGrid(status)}
+                <div class="lcd-records">
+                    <h2 class="lcd-section-title">최근 기록</h2>
+                    <div class="lcd-record-list">
+                        ${recordRows(status.recent_records)}
+                    </div>
                 </div>
             </section>`;
     }
@@ -179,15 +186,21 @@
                     <p>기구부에 손을 넣지 마세요 · ${remaining}</p>
                 </section>`;
         } else if (status.screen === "READY_TO_DISPENSE") {
+            const medicine = schedule ? escapeHtml(schedule.medicine_name) : "약";
+            const targetSlot = slotNumber(status.target_coordinate);
             html = `
-                <section class="lcd-workflow">
-                    <div class="lcd-icon" aria-hidden="true">●</div>
-                    <h1 class="lcd-title">복약 시간입니다</h1>
-                    ${common}
-                    <button id="dispense-button" type="button" class="lcd-primary">
+                <section class="lcd-workflow lcd-ready">
+                    <div class="lcd-ready-info">
+                        <h1 class="lcd-ready-title">복약 시간입니다</h1>
+                        <span class="lcd-ready-medicine">
+                            ${medicine} · ${targetSlot}번 슬롯
+                        </span>
+                        <span class="lcd-ready-remaining">${remaining}</span>
+                    </div>
+                    <button id="dispense-button" type="button"
+                            class="lcd-primary lcd-dispense-button">
                         약 배출
                     </button>
-                    <p>${remaining}</p>
                 </section>`;
         } else if (status.screen === "DISPENSING") {
             html = `

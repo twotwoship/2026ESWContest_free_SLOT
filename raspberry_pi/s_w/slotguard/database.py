@@ -642,17 +642,16 @@ def get_latest_result():
         conn.close()
 
 
-def get_recent_records(day_text, limit=3):
+def get_recent_records(limit=3):
     placeholders = ",".join("?" for _ in TERMINAL_STATUSES)
     conn = connect_db()
     try:
         rows = conn.execute(
             SCHEDULE_SELECT
             + f" WHERE status IN ({placeholders}) "
-            "AND date(COALESCE(completed_at, scheduled_at)) = date(?) "
             "ORDER BY COALESCE(completed_at, scheduled_at) DESC, id DESC "
             "LIMIT ?",
-            (*tuple(sorted(TERMINAL_STATUSES)), day_text, limit),
+            (*tuple(sorted(TERMINAL_STATUSES)), limit),
         ).fetchall()
         return [dict(row) for row in rows]
     finally:

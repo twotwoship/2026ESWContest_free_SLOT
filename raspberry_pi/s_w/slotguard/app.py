@@ -66,7 +66,7 @@ POWER_HELPER_PATH = Path(
     )
 )
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
-APP_VERSION = "0.2.6"
+APP_VERSION = "0.2.7"
 
 
 def load_auth_config():
@@ -824,7 +824,7 @@ def build_display_status():
             "y": target["y_coordinate"],
         }
 
-    today_records = get_recent_records(now.strftime("%Y-%m-%d"), 3)
+    recent_records = get_recent_records(3)
     uart_status = uart_service.get_status()
     settings = get_device_settings()
     local_ip = get_local_ip_address()
@@ -848,7 +848,7 @@ def build_display_status():
             for x_coordinate, y_coordinate in get_used_coordinates()
         ],
         "blister_exhausted": bool(device_state["blister_exhausted"]),
-        "recent_records": [serialize_schedule(row) for row in today_records],
+        "recent_records": [serialize_schedule(row) for row in recent_records],
         "settings": settings,
         "device": {
             "app": "OK",

@@ -5,6 +5,35 @@ xset s off
 xset -dpms
 xset s noblank
 
+# Audio devices can appear after the X session. Keep this best-effort work in
+# the background so a missing/default sink can never prevent the LCD kiosk
+# from starting.
+configure_audio() {
+    if [ -x /usr/bin/wpctl ]; then
+        /usr/bin/wpctl settings \
+            device.routes.default-sink-volume 1.0 >/dev/null 2>&1 || :
+        /usr/bin/wpctl settings --save \
+            device.routes.default-sink-volume >/dev/null 2>&1 || :
+
+        audio_attempt=0
+        while [ "$audio_attempt" -lt 20 ]; do
+            if /usr/bin/wpctl set-volume \
+                    @DEFAULT_AUDIO_SINK@ 1.0 >/dev/null 2>&1; then
+                break
+            fi
+            audio_attempt=$((audio_attempt + 1))
+            sleep 1
+        done
+    fi
+
+    if [ -x /usr/bin/amixer ]; then
+        /usr/bin/amixer -q -c Headphones \
+            sset PCM 100% unmute >/dev/null 2>&1 || :
+    fi
+}
+
+configure_audio &
+
 /usr/bin/openbox --config-file /etc/xdg/openbox/rc.xml &
 
 until /usr/bin/curl --silent --fail --max-time 2 \

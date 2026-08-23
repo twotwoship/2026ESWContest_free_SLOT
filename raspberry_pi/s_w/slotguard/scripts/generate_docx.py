@@ -21,6 +21,14 @@ DOCUMENTS = [
         BASE_DIR / "docs" / "ATmega128A_UART_구현명세_v1.0.md",
         BASE_DIR / "docs" / "ATmega128A_UART_구현명세_v1.0.docx",
     ),
+    (
+        BASE_DIR
+        / "docs"
+        / "SLOT-GUARD_Raspberry_Pi_전체_구현명세_v1.0.md",
+        BASE_DIR
+        / "docs"
+        / "SLOT-GUARD_Raspberry_Pi_전체_구현명세_v1.0.docx",
+    ),
 ]
 
 FONT_NAME = "Noto Sans CJK KR"
@@ -75,7 +83,10 @@ def set_page_number(paragraph):
     set_run_font(end_run, size=9, color="64748B")
 
 
-def configure_document(document):
+def configure_document(
+    document,
+    header_text="약SLOT-GUARD · UI/UX SPECIFICATION",
+):
     section = document.sections[0]
     section.top_margin = Cm(1.7)
     section.bottom_margin = Cm(1.7)
@@ -105,7 +116,7 @@ def configure_document(document):
 
     header = section.header.paragraphs[0]
     header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    header_run = header.add_run("약SLOT-GUARD · UI/UX SPECIFICATION")
+    header_run = header.add_run(header_text)
     set_run_font(header_run, size=8, bold=True, color="64748B")
     set_page_number(section.footer.paragraphs[0])
 
@@ -180,7 +191,11 @@ def add_table(document, table_lines):
     document.add_paragraph().paragraph_format.space_after = Pt(0)
 
 
-def add_title(document, text):
+def add_title(
+    document,
+    text,
+    subtitle_text="PRODUCT · UI/UX SPECIFICATION",
+):
     paragraph = document.add_paragraph(style="Title")
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     paragraph.paragraph_format.space_before = Pt(50)
@@ -189,7 +204,7 @@ def add_title(document, text):
 
     subtitle = document.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run("PRODUCT · UI/UX SPECIFICATION")
+    run = subtitle.add_run(subtitle_text)
     set_run_font(run, size=11, bold=True, color=BLUE)
     document.add_paragraph().add_run()
 
@@ -197,7 +212,18 @@ def add_title(document, text):
 def markdown_to_docx(source_path, output_path):
     lines = source_path.read_text(encoding="utf-8").splitlines()
     document = Document()
-    configure_document(document)
+    is_pi_system_spec = "Raspberry_Pi_전체_구현명세" in source_path.name
+    header_text = (
+        "약SLOT-GUARD · RASPBERRY PI SYSTEM SPECIFICATION"
+        if is_pi_system_spec
+        else "약SLOT-GUARD · UI/UX SPECIFICATION"
+    )
+    subtitle_text = (
+        "RASPBERRY PI · SYSTEM IMPLEMENTATION SPECIFICATION"
+        if is_pi_system_spec
+        else "PRODUCT · UI/UX SPECIFICATION"
+    )
+    configure_document(document, header_text=header_text)
 
     index = 0
     first_heading = True
@@ -231,7 +257,11 @@ def markdown_to_docx(source_path, output_path):
             level = len(heading_match.group(1))
             heading_text = heading_match.group(2)
             if first_heading and level == 1:
-                add_title(document, heading_text)
+                add_title(
+                    document,
+                    heading_text,
+                    subtitle_text=subtitle_text,
+                )
                 first_heading = False
             else:
                 paragraph = document.add_paragraph(
@@ -276,7 +306,11 @@ def markdown_to_docx(source_path, output_path):
 
     properties = document.core_properties
     properties.title = lines[0].lstrip("# ") if lines else source_path.stem
-    properties.subject = "약SLOT-GUARD 4인치 LCD 및 UART 구현 문서"
+    properties.subject = (
+        "약SLOT-GUARD Raspberry Pi 전체 시스템 구현 문서"
+        if is_pi_system_spec
+        else "약SLOT-GUARD 4인치 LCD 및 UART 구현 문서"
+    )
     properties.author = "약SLOT-GUARD Team"
     properties.keywords = "SLOT-GUARD, Raspberry Pi, ATmega128A, UART, LCD"
 
