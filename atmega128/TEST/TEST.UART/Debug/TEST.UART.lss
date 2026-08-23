@@ -15,6 +15,7 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY
   5 .debug_aranges 000001a8  00000000  00000000  00000ec8  2**3
                   CONTENTS, READONLY, DEBUGGING
+<<<<<<< HEAD
   6 .debug_info   00002351  00000000  00000000  00001070  2**0
                   CONTENTS, READONLY, DEBUGGING
   7 .debug_abbrev 00000e48  00000000  00000000  000033c1  2**0
@@ -28,6 +29,21 @@ Idx Name          Size      VMA       LMA       File off  Algn
  11 .debug_loc    0000134f  00000000  00000000  00006005  2**0
                   CONTENTS, READONLY, DEBUGGING
  12 .debug_ranges 00000168  00000000  00000000  00007354  2**0
+=======
+  6 .debug_info   0000234f  00000000  00000000  00001070  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  7 .debug_abbrev 00000e48  00000000  00000000  000033bf  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  8 .debug_line   00000fb5  00000000  00000000  00004207  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  9 .debug_frame  00000484  00000000  00000000  000051bc  2**2
+                  CONTENTS, READONLY, DEBUGGING
+ 10 .debug_str    0000098e  00000000  00000000  00005640  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 11 .debug_loc    0000134f  00000000  00000000  00005fce  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 12 .debug_ranges 00000168  00000000  00000000  0000731d  2**0
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
                   CONTENTS, READONLY, DEBUGGING
 
 Disassembly of section .text:
@@ -209,6 +225,11 @@ Disassembly of section .text:
  136:	60 e0       	ldi	r22, 0x00	; 0
  138:	70 e0       	ldi	r23, 0x00	; 0
  13a:	e0 d5       	rcall	.+3008   	; 0xcfc <eeprom_read_block>
+<<<<<<< HEAD
+=======
+
+	if (st->magic_version != EEPROM_MAGIC_VERSION)
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  13c:	88 81       	ld	r24, Y
  13e:	99 81       	ldd	r25, Y+1	; 0x01
  140:	81 31       	cpi	r24, 0x11	; 17
@@ -295,7 +316,10 @@ void FSM_HandleMove(const MoveCmd_t *cmd)
  1c6:	8a 81       	ldd	r24, Y+2	; 0x02
  1c8:	9b 81       	ldd	r25, Y+3	; 0x03
  1ca:	11 d4       	rcall	.+2082   	; 0x9ee <Send_WAIT>
+<<<<<<< HEAD
 	
+=======
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
 }
  1cc:	df 91       	pop	r29
  1ce:	cf 91       	pop	r28
@@ -319,14 +343,24 @@ void FSM_HandleDispense(const DispenseCmd_t *cmd)
  1e2:	45 e0       	ldi	r20, 0x05	; 5
  1e4:	51 e0       	ldi	r21, 0x01	; 1
  1e6:	da d3       	rcall	.+1972   	; 0x99c <Send_ACK>
+<<<<<<< HEAD
 	Send_RESULT(cmd->req_id, '0', '0', '1');
+=======
+	Send_RESULT(cmd->req_id, 0, 0, 1);
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  1e8:	68 81       	ld	r22, Y
  1ea:	79 81       	ldd	r23, Y+1	; 0x01
  1ec:	8a 81       	ldd	r24, Y+2	; 0x02
  1ee:	9b 81       	ldd	r25, Y+3	; 0x03
+<<<<<<< HEAD
  1f0:	01 e3       	ldi	r16, 0x31	; 49
  1f2:	20 e3       	ldi	r18, 0x30	; 48
  1f4:	40 e3       	ldi	r20, 0x30	; 48
+=======
+ 1f0:	01 e0       	ldi	r16, 0x01	; 1
+ 1f2:	20 e0       	ldi	r18, 0x00	; 0
+ 1f4:	40 e0       	ldi	r20, 0x00	; 0
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  1f6:	1b d4       	rcall	.+2102   	; 0xa2e <Send_RESULT>
 }
  1f8:	df 91       	pop	r29
@@ -341,6 +375,7 @@ void FSM_HandleResultAck(uint32_t req_id)
  200:	08 95       	ret
 
 00000202 <main>:
+<<<<<<< HEAD
  202:	cf 93       	push	r28
  204:	df 93       	push	r29
  206:	00 d0       	rcall	.+0      	; 0x208 <main+0x6>
@@ -378,13 +413,99 @@ void FSM_HandleResultAck(uint32_t req_id)
  246:	63 d0       	rcall	.+198    	; 0x30e <UART0_TxString>
  248:	4e d4       	rcall	.+2204   	; 0xae6 <Task_UartRxProcess>
  24a:	fe cf       	rjmp	.-4      	; 0x248 <main+0x46>
+=======
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
 
 0000024c <RingBuf_Init>:
  24c:	10 92 9f 01 	sts	0x019F, r1	; 0x80019f <rb_head>
  250:	10 92 9e 01 	sts	0x019E, r1	; 0x80019e <__data_end>
  254:	08 95       	ret
 
+<<<<<<< HEAD
 00000256 <RingBuf_Push>:
+=======
+int main(void)
+{
+ 202:	cf 93       	push	r28
+ 204:	df 93       	push	r29
+ 206:	00 d0       	rcall	.+0      	; 0x208 <main+0x6>
+ 208:	00 d0       	rcall	.+0      	; 0x20a <main+0x8>
+ 20a:	cd b7       	in	r28, 0x3d	; 61
+ 20c:	de b7       	in	r29, 0x3e	; 62
+	UART0_Init(9600);
+ 20e:	60 e8       	ldi	r22, 0x80	; 128
+ 210:	75 e2       	ldi	r23, 0x25	; 37
+ 212:	80 e0       	ldi	r24, 0x00	; 0
+ 214:	90 e0       	ldi	r25, 0x00	; 0
+ 216:	64 d0       	rcall	.+200    	; 0x2e0 <UART0_Init>
+	sei();
+ 218:	78 94       	sei
+
+	// 부팅 시 EEPROM 상태 로드 (명세서 6.3, 10번 AT-14)
+	uint8_t loaded = EEPROM_LoadState(&g_persist_state);
+ 21a:	85 ea       	ldi	r24, 0xA5	; 165
+ 21c:	92 e0       	ldi	r25, 0x02	; 2
+ 21e:	86 df       	rcall	.-244    	; 0x12c <EEPROM_LoadState>
+
+	if (loaded)
+ 220:	88 23       	and	r24, r24
+ 222:	79 f0       	breq	.+30     	; 0x242 <main+0x40>
+	{
+		uint32_t recovery_req_id;
+		if (Recovery_CheckOnBoot(&g_persist_state, &recovery_req_id))
+ 224:	be 01       	movw	r22, r28
+ 226:	6f 5f       	subi	r22, 0xFF	; 255
+ 228:	7f 4f       	sbci	r23, 0xFF	; 255
+ 22a:	85 ea       	ldi	r24, 0xA5	; 165
+ 22c:	92 e0       	ldi	r25, 0x02	; 2
+ 22e:	a0 df       	rcall	.-192    	; 0x170 <Recovery_CheckOnBoot>
+ 230:	88 23       	and	r24, r24
+ 232:	39 f0       	breq	.+14     	; 0x242 <main+0x40>
+		{
+			// MOVING/DISPENSING 도중 리셋됨 - 자동 재구동 금지, RECOVERY_REQUIRED 통보
+			Send_ERROR(recovery_req_id, "RECOVERY_REQUIRED");
+ 234:	69 81       	ldd	r22, Y+1	; 0x01
+ 236:	7a 81       	ldd	r23, Y+2	; 0x02
+ 238:	8b 81       	ldd	r24, Y+3	; 0x03
+ 23a:	9c 81       	ldd	r25, Y+4	; 0x04
+ 23c:	4e e0       	ldi	r20, 0x0E	; 14
+ 23e:	51 e0       	ldi	r21, 0x01	; 1
+		}
+	}
+	// loaded == 0: 최초 부팅이거나 CRC 무효 - g_persist_state는 이미 기본값(NONE)으로 세팅됨
+
+	UART0_TxString("SLOT-GUARD ATmega128A Ready\r\n");
+ 240:	29 d4       	rcall	.+2130   	; 0xa94 <Send_ERROR>
+ 242:	80 e2       	ldi	r24, 0x20	; 32
+ 244:	91 e0       	ldi	r25, 0x01	; 1
+ 246:	63 d0       	rcall	.+198    	; 0x30e <UART0_TxString>
+
+	while (1)
+	{
+		Task_UartRxProcess();   // 링버퍼 -> 프레임 추출 -> 파싱 -> FSM 디스패치
+ 248:	4e d4       	rcall	.+2204   	; 0xae6 <Task_UartRxProcess>
+ 24a:	fe cf       	rjmp	.-4      	; 0x248 <main+0x46>
+
+0000024c <RingBuf_Init>:
+static volatile uint8_t  rb_head = 0;   // 쓰기 위치 (ISR)
+static volatile uint8_t  rb_tail = 0;   // 읽기 위치 (메인 루프)
+
+void RingBuf_Init(void)
+{
+	rb_head = 0;
+ 24c:	10 92 9f 01 	sts	0x019F, r1	; 0x80019f <rb_head>
+	rb_tail = 0;
+ 250:	10 92 9e 01 	sts	0x019E, r1	; 0x80019e <__data_end>
+ 254:	08 95       	ret
+
+00000256 <RingBuf_Push>:
+}
+
+// ISR 전용 - 절대 blocking 하지 않음
+void RingBuf_Push(uint8_t byte)
+{
+	uint8_t next = (uint8_t)((rb_head + 1) % RINGBUF_SIZE);
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  256:	20 91 9f 01 	lds	r18, 0x019F	; 0x80019f <rb_head>
  25a:	30 e0       	ldi	r19, 0x00	; 0
  25c:	2f 5f       	subi	r18, 0xFF	; 255
@@ -399,14 +520,28 @@ void FSM_HandleResultAck(uint32_t req_id)
  26e:	3f 6f       	ori	r19, 0xFF	; 255
  270:	2f 5f       	subi	r18, 0xFF	; 255
  272:	3f 4f       	sbci	r19, 0xFF	; 255
+<<<<<<< HEAD
  274:	90 91 9e 01 	lds	r25, 0x019E	; 0x80019e <__data_end>
  278:	92 17       	cp	r25, r18
  27a:	41 f0       	breq	.+16     	; 0x28c <RingBuf_Push+0x36>
+=======
+	if (next == rb_tail)
+ 274:	90 91 9e 01 	lds	r25, 0x019E	; 0x80019e <__data_end>
+ 278:	92 17       	cp	r25, r18
+ 27a:	41 f0       	breq	.+16     	; 0x28c <RingBuf_Push+0x36>
+	{
+		// 버퍼 풀 - 오버런. 정책상 가장 오래된 바이트를 버리지 않고
+		// 새 바이트를 버림 (프레임 경계가 깨지는 것을 최소화하기 위함)
+		return;
+	}
+	rb_buf[rb_head] = byte;
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  27c:	e0 91 9f 01 	lds	r30, 0x019F	; 0x80019f <rb_head>
  280:	f0 e0       	ldi	r31, 0x00	; 0
  282:	e0 56       	subi	r30, 0x60	; 96
  284:	fe 4f       	sbci	r31, 0xFE	; 254
  286:	80 83       	st	Z, r24
+<<<<<<< HEAD
  288:	20 93 9f 01 	sts	0x019F, r18	; 0x80019f <rb_head>
  28c:	08 95       	ret
 
@@ -485,11 +620,156 @@ void FSM_HandleResultAck(uint32_t req_id)
  31a:	88 81       	ld	r24, Y
  31c:	81 11       	cpse	r24, r1
  31e:	fb cf       	rjmp	.-10     	; 0x316 <UART0_TxString+0x8>
+=======
+	rb_head = next;
+ 288:	20 93 9f 01 	sts	0x019F, r18	; 0x80019f <rb_head>
+ 28c:	08 95       	ret
+
+0000028e <RingBuf_IsEmpty>:
+}
+
+// 메인 루프 전용
+uint8_t RingBuf_IsEmpty(void)
+{
+	return (rb_head == rb_tail);
+ 28e:	20 91 9f 01 	lds	r18, 0x019F	; 0x80019f <rb_head>
+ 292:	90 91 9e 01 	lds	r25, 0x019E	; 0x80019e <__data_end>
+ 296:	81 e0       	ldi	r24, 0x01	; 1
+ 298:	29 13       	cpse	r18, r25
+ 29a:	80 e0       	ldi	r24, 0x00	; 0
+}
+ 29c:	08 95       	ret
+
+0000029e <RingBuf_Pop>:
+
+uint8_t RingBuf_Pop(uint8_t *out)
+{
+ 29e:	cf 93       	push	r28
+ 2a0:	df 93       	push	r29
+ 2a2:	ec 01       	movw	r28, r24
+	if (RingBuf_IsEmpty()) return 0;
+ 2a4:	f4 df       	rcall	.-24     	; 0x28e <RingBuf_IsEmpty>
+ 2a6:	81 11       	cpse	r24, r1
+ 2a8:	17 c0       	rjmp	.+46     	; 0x2d8 <RingBuf_Pop+0x3a>
+
+	*out = rb_buf[rb_tail];
+ 2aa:	e0 91 9e 01 	lds	r30, 0x019E	; 0x80019e <__data_end>
+ 2ae:	f0 e0       	ldi	r31, 0x00	; 0
+ 2b0:	e0 56       	subi	r30, 0x60	; 96
+ 2b2:	fe 4f       	sbci	r31, 0xFE	; 254
+ 2b4:	80 81       	ld	r24, Z
+ 2b6:	88 83       	st	Y, r24
+	rb_tail = (uint8_t)((rb_tail + 1) % RINGBUF_SIZE);
+ 2b8:	80 91 9e 01 	lds	r24, 0x019E	; 0x80019e <__data_end>
+ 2bc:	90 e0       	ldi	r25, 0x00	; 0
+ 2be:	01 96       	adiw	r24, 0x01	; 1
+ 2c0:	8f 77       	andi	r24, 0x7F	; 127
+ 2c2:	90 78       	andi	r25, 0x80	; 128
+ 2c4:	99 23       	and	r25, r25
+ 2c6:	24 f4       	brge	.+8      	; 0x2d0 <RingBuf_Pop+0x32>
+ 2c8:	01 97       	sbiw	r24, 0x01	; 1
+ 2ca:	80 68       	ori	r24, 0x80	; 128
+ 2cc:	9f 6f       	ori	r25, 0xFF	; 255
+ 2ce:	01 96       	adiw	r24, 0x01	; 1
+ 2d0:	80 93 9e 01 	sts	0x019E, r24	; 0x80019e <__data_end>
+	return 1;
+ 2d4:	81 e0       	ldi	r24, 0x01	; 1
+ 2d6:	01 c0       	rjmp	.+2      	; 0x2da <RingBuf_Pop+0x3c>
+	return (rb_head == rb_tail);
+}
+
+uint8_t RingBuf_Pop(uint8_t *out)
+{
+	if (RingBuf_IsEmpty()) return 0;
+ 2d8:	80 e0       	ldi	r24, 0x00	; 0
+
+	*out = rb_buf[rb_tail];
+	rb_tail = (uint8_t)((rb_tail + 1) % RINGBUF_SIZE);
+	return 1;
+}
+ 2da:	df 91       	pop	r29
+ 2dc:	cf 91       	pop	r28
+ 2de:	08 95       	ret
+
+000002e0 <UART0_Init>:
+
+// ==================== UART0 저수준 ====================
+void UART0_Init(unsigned long baud)
+{
+ 2e0:	9b 01       	movw	r18, r22
+ 2e2:	ac 01       	movw	r20, r24
+	unsigned int ubrr = (unsigned int)((F_CPU / 16 / baud) - 1);
+ 2e4:	60 e4       	ldi	r22, 0x40	; 64
+ 2e6:	72 e4       	ldi	r23, 0x42	; 66
+ 2e8:	8f e0       	ldi	r24, 0x0F	; 15
+ 2ea:	90 e0       	ldi	r25, 0x00	; 0
+ 2ec:	d3 d4       	rcall	.+2470   	; 0xc94 <__udivmodsi4>
+ 2ee:	21 50       	subi	r18, 0x01	; 1
+ 2f0:	31 09       	sbc	r19, r1
+	UBRR0H = (uint8_t)(ubrr >> 8);
+ 2f2:	30 93 90 00 	sts	0x0090, r19	; 0x800090 <__TEXT_REGION_LENGTH__+0x7e0090>
+	UBRR0L = (uint8_t)ubrr;
+ 2f6:	29 b9       	out	0x09, r18	; 9
+
+	// RX 인터럽트, RX/TX 활성화
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+ 2f8:	88 e9       	ldi	r24, 0x98	; 152
+ 2fa:	8a b9       	out	0x0a, r24	; 10
+	// 8N1
+	UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
+ 2fc:	86 e0       	ldi	r24, 0x06	; 6
+ 2fe:	80 93 95 00 	sts	0x0095, r24	; 0x800095 <__TEXT_REGION_LENGTH__+0x7e0095>
+
+	RingBuf_Init();
+ 302:	a4 cf       	rjmp	.-184    	; 0x24c <RingBuf_Init>
+ 304:	08 95       	ret
+
+00000306 <UART0_TxChar>:
+}
+
+void UART0_TxChar(char data)
+{
+	while (!(UCSR0A & (1 << UDRE0)));
+ 306:	5d 9b       	sbis	0x0b, 5	; 11
+ 308:	fe cf       	rjmp	.-4      	; 0x306 <UART0_TxChar>
+	UDR0 = (uint8_t)data;
+ 30a:	8c b9       	out	0x0c, r24	; 12
+ 30c:	08 95       	ret
+
+0000030e <UART0_TxString>:
+}
+
+void UART0_TxString(const char *str)
+{
+ 30e:	cf 93       	push	r28
+ 310:	df 93       	push	r29
+ 312:	ec 01       	movw	r28, r24
+	while (*str)
+ 314:	02 c0       	rjmp	.+4      	; 0x31a <UART0_TxString+0xc>
+	{
+		UART0_TxChar(*str++);
+ 316:	21 96       	adiw	r28, 0x01	; 1
+ 318:	f6 df       	rcall	.-20     	; 0x306 <UART0_TxChar>
+	UDR0 = (uint8_t)data;
+}
+
+void UART0_TxString(const char *str)
+{
+	while (*str)
+ 31a:	88 81       	ld	r24, Y
+ 31c:	81 11       	cpse	r24, r1
+ 31e:	fb cf       	rjmp	.-10     	; 0x316 <UART0_TxString+0x8>
+	{
+		UART0_TxChar(*str++);
+	}
+}
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  320:	df 91       	pop	r29
  322:	cf 91       	pop	r28
  324:	08 95       	ret
 
 00000326 <__vector_18>:
+<<<<<<< HEAD
  326:	1f 92       	push	r1
  328:	0f 92       	push	r0
  32a:	0f b6       	in	r0, 0x3f	; 63
@@ -1461,6 +1741,1432 @@ void FSM_HandleResultAck(uint32_t req_id)
 
 00000a94 <Send_ERROR>:
  a94:	0f 93       	push	r16
+=======
+
+// ISR은 링버퍼에 push만 함 - 파싱/처리는 절대 여기서 하지 않음
+ISR(USART0_RX_vect)
+{
+ 326:	1f 92       	push	r1
+ 328:	0f 92       	push	r0
+ 32a:	0f b6       	in	r0, 0x3f	; 63
+ 32c:	0f 92       	push	r0
+ 32e:	11 24       	eor	r1, r1
+ 330:	0b b6       	in	r0, 0x3b	; 59
+ 332:	0f 92       	push	r0
+ 334:	2f 93       	push	r18
+ 336:	3f 93       	push	r19
+ 338:	4f 93       	push	r20
+ 33a:	5f 93       	push	r21
+ 33c:	6f 93       	push	r22
+ 33e:	7f 93       	push	r23
+ 340:	8f 93       	push	r24
+ 342:	9f 93       	push	r25
+ 344:	af 93       	push	r26
+ 346:	bf 93       	push	r27
+ 348:	ef 93       	push	r30
+ 34a:	ff 93       	push	r31
+	uint8_t data = UDR0;   // 읽는 순간 RXC0 플래그 자동 클리어
+ 34c:	8c b1       	in	r24, 0x0c	; 12
+	RingBuf_Push(data);
+ 34e:	83 df       	rcall	.-250    	; 0x256 <RingBuf_Push>
+}
+ 350:	ff 91       	pop	r31
+ 352:	ef 91       	pop	r30
+ 354:	bf 91       	pop	r27
+ 356:	af 91       	pop	r26
+ 358:	9f 91       	pop	r25
+ 35a:	8f 91       	pop	r24
+ 35c:	7f 91       	pop	r23
+ 35e:	6f 91       	pop	r22
+ 360:	5f 91       	pop	r21
+ 362:	4f 91       	pop	r20
+ 364:	3f 91       	pop	r19
+ 366:	2f 91       	pop	r18
+ 368:	0f 90       	pop	r0
+ 36a:	0b be       	out	0x3b, r0	; 59
+ 36c:	0f 90       	pop	r0
+ 36e:	0f be       	out	0x3f, r0	; 63
+ 370:	0f 90       	pop	r0
+ 372:	1f 90       	pop	r1
+ 374:	18 95       	reti
+
+00000376 <Frame_TryExtract>:
+
+// 링버퍼에 쌓인 바이트를 한 개씩 소비하며 LF를 만나면 완성된 프레임을 반환한다.
+// 반환 1: frame_out에 완성된 프레임 문자열이 채워짐
+// 반환 0: 링버퍼가 비었고 아직 완성된 프레임 없음
+uint8_t Frame_TryExtract(char *frame_out, uint8_t max_len)
+{
+ 376:	ef 92       	push	r14
+ 378:	ff 92       	push	r15
+ 37a:	0f 93       	push	r16
+ 37c:	1f 93       	push	r17
+ 37e:	cf 93       	push	r28
+ 380:	df 93       	push	r29
+ 382:	1f 92       	push	r1
+ 384:	cd b7       	in	r28, 0x3d	; 61
+ 386:	de b7       	in	r29, 0x3e	; 62
+ 388:	8c 01       	movw	r16, r24
+ 38a:	e6 2e       	mov	r14, r22
+	uint8_t byte;
+
+	while (RingBuf_Pop(&byte))
+ 38c:	3b c0       	rjmp	.+118    	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+	{
+		if (byte == '\n')
+ 38e:	89 81       	ldd	r24, Y+1	; 0x01
+ 390:	8a 30       	cpi	r24, 0x0A	; 10
+ 392:	f1 f4       	brne	.+60     	; 0x3d0 <Frame_TryExtract+0x5a>
+		{
+			// 폐기 중이던 프레임의 끝이면 상태만 리셋하고 다음 프레임 탐색 계속
+			if (frame_discarding)
+ 394:	80 91 62 02 	lds	r24, 0x0262	; 0x800262 <frame_discarding>
+ 398:	88 23       	and	r24, r24
+ 39a:	29 f0       	breq	.+10     	; 0x3a6 <Frame_TryExtract+0x30>
+			{
+				frame_discarding = 0;
+ 39c:	10 92 62 02 	sts	0x0262, r1	; 0x800262 <frame_discarding>
+				frame_wip_len = 0;
+ 3a0:	10 92 63 02 	sts	0x0263, r1	; 0x800263 <frame_wip_len>
+				continue;
+ 3a4:	2f c0       	rjmp	.+94     	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+			}
+
+			// 빈 프레임(연속 개행 등)이면 무시하고 다음 프레임 탐색 계속
+			if (frame_wip_len == 0)
+ 3a6:	80 91 63 02 	lds	r24, 0x0263	; 0x800263 <frame_wip_len>
+ 3aa:	88 23       	and	r24, r24
+ 3ac:	59 f1       	breq	.+86     	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+				continue;
+			}
+
+			// 완성된 프레임을 출력 버퍼로 복사하고 즉시 반환
+			uint8_t copy_len = frame_wip_len;
+			if (copy_len > max_len) copy_len = max_len;
+ 3ae:	e8 16       	cp	r14, r24
+ 3b0:	08 f0       	brcs	.+2      	; 0x3b4 <Frame_TryExtract+0x3e>
+			{
+				continue;
+			}
+
+			// 완성된 프레임을 출력 버퍼로 복사하고 즉시 반환
+			uint8_t copy_len = frame_wip_len;
+ 3b2:	e8 2e       	mov	r14, r24
+			if (copy_len > max_len) copy_len = max_len;
+			memcpy(frame_out, frame_wip, copy_len);
+ 3b4:	f1 2c       	mov	r15, r1
+ 3b6:	a7 01       	movw	r20, r14
+ 3b8:	64 e6       	ldi	r22, 0x64	; 100
+ 3ba:	72 e0       	ldi	r23, 0x02	; 2
+ 3bc:	c8 01       	movw	r24, r16
+ 3be:	8c d4       	rcall	.+2328   	; 0xcd8 <memcpy>
+			frame_out[copy_len] = '\0';
+ 3c0:	f8 01       	movw	r30, r16
+ 3c2:	ee 0d       	add	r30, r14
+ 3c4:	ff 1d       	adc	r31, r15
+ 3c6:	10 82       	st	Z, r1
+
+			frame_wip_len = 0;
+ 3c8:	10 92 63 02 	sts	0x0263, r1	; 0x800263 <frame_wip_len>
+			return 1;
+ 3cc:	81 e0       	ldi	r24, 0x01	; 1
+ 3ce:	1f c0       	rjmp	.+62     	; 0x40e <__LOCK_REGION_LENGTH__+0xe>
+		}
+		else if (byte == '\r')
+ 3d0:	8d 30       	cpi	r24, 0x0D	; 13
+ 3d2:	c1 f0       	breq	.+48     	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+		{
+			continue;   // CR은 허용 후 제거 (명세서 2번)
+		}
+		else
+		{
+			if (frame_discarding)
+ 3d4:	90 91 62 02 	lds	r25, 0x0262	; 0x800262 <frame_discarding>
+ 3d8:	91 11       	cpse	r25, r1
+ 3da:	14 c0       	rjmp	.+40     	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+			{
+				continue;   // 이미 폐기 확정된 프레임 - 계속 버림
+			}
+
+			if (frame_wip_len >= MAX_FRAME_LEN)
+ 3dc:	e0 91 63 02 	lds	r30, 0x0263	; 0x800263 <frame_wip_len>
+ 3e0:	e0 34       	cpi	r30, 0x40	; 64
+ 3e2:	40 f0       	brcs	.+16     	; 0x3f4 <Frame_TryExtract+0x7e>
+			{
+				// 64바이트 초과 - 이 프레임은 폐기 확정, LF까지 나머지는 버림
+				frame_discarding = 1;
+ 3e4:	81 e0       	ldi	r24, 0x01	; 1
+ 3e6:	80 93 62 02 	sts	0x0262, r24	; 0x800262 <frame_discarding>
+				frame_overflow_latch = 1;
+ 3ea:	80 93 61 02 	sts	0x0261, r24	; 0x800261 <frame_overflow_latch>
+				frame_wip_len = 0;
+ 3ee:	10 92 63 02 	sts	0x0263, r1	; 0x800263 <frame_wip_len>
+				continue;
+ 3f2:	08 c0       	rjmp	.+16     	; 0x404 <__LOCK_REGION_LENGTH__+0x4>
+			}
+
+			frame_wip[frame_wip_len++] = (char)byte;
+ 3f4:	91 e0       	ldi	r25, 0x01	; 1
+ 3f6:	9e 0f       	add	r25, r30
+ 3f8:	90 93 63 02 	sts	0x0263, r25	; 0x800263 <frame_wip_len>
+ 3fc:	f0 e0       	ldi	r31, 0x00	; 0
+ 3fe:	ec 59       	subi	r30, 0x9C	; 156
+ 400:	fd 4f       	sbci	r31, 0xFD	; 253
+ 402:	80 83       	st	Z, r24
+// 반환 0: 링버퍼가 비었고 아직 완성된 프레임 없음
+uint8_t Frame_TryExtract(char *frame_out, uint8_t max_len)
+{
+	uint8_t byte;
+
+	while (RingBuf_Pop(&byte))
+ 404:	ce 01       	movw	r24, r28
+ 406:	01 96       	adiw	r24, 0x01	; 1
+ 408:	4a df       	rcall	.-364    	; 0x29e <RingBuf_Pop>
+ 40a:	81 11       	cpse	r24, r1
+ 40c:	c0 cf       	rjmp	.-128    	; 0x38e <Frame_TryExtract+0x18>
+			frame_wip[frame_wip_len++] = (char)byte;
+		}
+	}
+
+	return 0;   // 링버퍼 소진, 완성된 프레임 없음
+}
+ 40e:	0f 90       	pop	r0
+ 410:	df 91       	pop	r29
+ 412:	cf 91       	pop	r28
+ 414:	1f 91       	pop	r17
+ 416:	0f 91       	pop	r16
+ 418:	ff 90       	pop	r15
+ 41a:	ef 90       	pop	r14
+ 41c:	08 95       	ret
+
+0000041e <Frame_ConsumeOverflowFlag>:
+
+// 폐기된 프레임(오버플로) 이벤트가 있었는지 확인하고 소비(1회성)한다.
+uint8_t Frame_ConsumeOverflowFlag(void)
+{
+	if (frame_overflow_latch)
+ 41e:	80 91 61 02 	lds	r24, 0x0261	; 0x800261 <frame_overflow_latch>
+ 422:	88 23       	and	r24, r24
+ 424:	19 f0       	breq	.+6      	; 0x42c <Frame_ConsumeOverflowFlag+0xe>
+	{
+		frame_overflow_latch = 0;
+ 426:	10 92 61 02 	sts	0x0261, r1	; 0x800261 <frame_overflow_latch>
+		return 1;
+ 42a:	81 e0       	ldi	r24, 0x01	; 1
+	}
+	return 0;
+}
+ 42c:	08 95       	ret
+
+0000042e <Split_Fields>:
+
+// ==================== 문자열/숫자 유틸 ====================
+uint8_t Split_Fields(const char *frame, char fields[][MAX_FIELD_LEN], uint8_t max_fields)
+{
+ 42e:	fc 01       	movw	r30, r24
+	uint8_t field_idx = 0;
+	uint8_t char_idx = 0;
+ 430:	20 e0       	ldi	r18, 0x00	; 0
+}
+
+// ==================== 문자열/숫자 유틸 ====================
+uint8_t Split_Fields(const char *frame, char fields[][MAX_FIELD_LEN], uint8_t max_fields)
+{
+	uint8_t field_idx = 0;
+ 432:	80 e0       	ldi	r24, 0x00	; 0
+	uint8_t char_idx = 0;
+	const char *p = frame;
+
+	while (*p && field_idx < max_fields)
+ 434:	1c c0       	rjmp	.+56     	; 0x46e <Split_Fields+0x40>
+	{
+		if (*p == '|')
+ 436:	9c 37       	cpi	r25, 0x7C	; 124
+ 438:	69 f4       	brne	.+26     	; 0x454 <Split_Fields+0x26>
+		{
+			fields[field_idx][char_idx] = '\0';
+ 43a:	db 01       	movw	r26, r22
+ 43c:	30 e1       	ldi	r19, 0x10	; 16
+ 43e:	83 9f       	mul	r24, r19
+ 440:	a0 0d       	add	r26, r0
+ 442:	b1 1d       	adc	r27, r1
+ 444:	11 24       	eor	r1, r1
+ 446:	a2 0f       	add	r26, r18
+ 448:	b1 1d       	adc	r27, r1
+ 44a:	1c 92       	st	X, r1
+			field_idx++;
+ 44c:	8f 5f       	subi	r24, 0xFF	; 255
+			char_idx = 0;
+			p++;
+ 44e:	31 96       	adiw	r30, 0x01	; 1
+	{
+		if (*p == '|')
+		{
+			fields[field_idx][char_idx] = '\0';
+			field_idx++;
+			char_idx = 0;
+ 450:	20 e0       	ldi	r18, 0x00	; 0
+			p++;
+			continue;
+ 452:	0d c0       	rjmp	.+26     	; 0x46e <Split_Fields+0x40>
+		}
+
+		if (char_idx < MAX_FIELD_LEN - 1)
+ 454:	2f 30       	cpi	r18, 0x0F	; 15
+ 456:	50 f4       	brcc	.+20     	; 0x46c <Split_Fields+0x3e>
+		{
+			fields[field_idx][char_idx++] = *p;
+ 458:	db 01       	movw	r26, r22
+ 45a:	30 e1       	ldi	r19, 0x10	; 16
+ 45c:	83 9f       	mul	r24, r19
+ 45e:	a0 0d       	add	r26, r0
+ 460:	b1 1d       	adc	r27, r1
+ 462:	11 24       	eor	r1, r1
+ 464:	a2 0f       	add	r26, r18
+ 466:	b1 1d       	adc	r27, r1
+ 468:	9c 93       	st	X, r25
+ 46a:	2f 5f       	subi	r18, 0xFF	; 255
+		}
+		p++;
+ 46c:	31 96       	adiw	r30, 0x01	; 1
+{
+	uint8_t field_idx = 0;
+	uint8_t char_idx = 0;
+	const char *p = frame;
+
+	while (*p && field_idx < max_fields)
+ 46e:	90 81       	ld	r25, Z
+ 470:	99 23       	and	r25, r25
+ 472:	11 f0       	breq	.+4      	; 0x478 <Split_Fields+0x4a>
+ 474:	84 17       	cp	r24, r20
+ 476:	f8 f2       	brcs	.-66     	; 0x436 <Split_Fields+0x8>
+			fields[field_idx][char_idx++] = *p;
+		}
+		p++;
+	}
+
+	if (field_idx < max_fields)
+ 478:	84 17       	cp	r24, r20
+ 47a:	50 f4       	brcc	.+20     	; 0x490 <Split_Fields+0x62>
+	{
+		fields[field_idx][char_idx] = '\0';
+ 47c:	90 e1       	ldi	r25, 0x10	; 16
+ 47e:	89 9f       	mul	r24, r25
+ 480:	60 0d       	add	r22, r0
+ 482:	71 1d       	adc	r23, r1
+ 484:	11 24       	eor	r1, r1
+ 486:	fb 01       	movw	r30, r22
+ 488:	e2 0f       	add	r30, r18
+ 48a:	f1 1d       	adc	r31, r1
+ 48c:	10 82       	st	Z, r1
+		field_idx++;
+ 48e:	8f 5f       	subi	r24, 0xFF	; 255
+	}
+
+	return field_idx;
+}
+ 490:	08 95       	ret
+
+00000492 <IsAllDigits>:
+
+uint8_t IsAllDigits(const char *s)
+{
+ 492:	fc 01       	movw	r30, r24
+	if (*s == '\0') return 0;
+ 494:	80 81       	ld	r24, Z
+ 496:	81 11       	cpse	r24, r1
+ 498:	05 c0       	rjmp	.+10     	; 0x4a4 <IsAllDigits+0x12>
+ 49a:	09 c0       	rjmp	.+18     	; 0x4ae <IsAllDigits+0x1c>
+	while (*s)
+	{
+		if (*s < '0' || *s > '9') return 0;
+ 49c:	90 53       	subi	r25, 0x30	; 48
+ 49e:	9a 30       	cpi	r25, 0x0A	; 10
+ 4a0:	40 f4       	brcc	.+16     	; 0x4b2 <IsAllDigits+0x20>
+		s++;
+ 4a2:	31 96       	adiw	r30, 0x01	; 1
+}
+
+uint8_t IsAllDigits(const char *s)
+{
+	if (*s == '\0') return 0;
+	while (*s)
+ 4a4:	90 81       	ld	r25, Z
+ 4a6:	91 11       	cpse	r25, r1
+ 4a8:	f9 cf       	rjmp	.-14     	; 0x49c <IsAllDigits+0xa>
+	{
+		if (*s < '0' || *s > '9') return 0;
+		s++;
+	}
+	return 1;
+ 4aa:	81 e0       	ldi	r24, 0x01	; 1
+ 4ac:	08 95       	ret
+	return field_idx;
+}
+
+uint8_t IsAllDigits(const char *s)
+{
+	if (*s == '\0') return 0;
+ 4ae:	80 e0       	ldi	r24, 0x00	; 0
+ 4b0:	08 95       	ret
+	while (*s)
+	{
+		if (*s < '0' || *s > '9') return 0;
+ 4b2:	80 e0       	ldi	r24, 0x00	; 0
+		s++;
+	}
+	return 1;
+}
+ 4b4:	08 95       	ret
+
+000004b6 <IsAllHexDigits>:
+
+uint8_t IsAllHexDigits(const char *s)
+{
+ 4b6:	fc 01       	movw	r30, r24
+	if (*s == '\0') return 0;
+ 4b8:	80 81       	ld	r24, Z
+ 4ba:	81 11       	cpse	r24, r1
+ 4bc:	09 c0       	rjmp	.+18     	; 0x4d0 <IsAllHexDigits+0x1a>
+ 4be:	0d c0       	rjmp	.+26     	; 0x4da <IsAllHexDigits+0x24>
+	while (*s)
+	{
+		uint8_t is_digit = (*s >= '0' && *s <= '9');
+ 4c0:	80 ed       	ldi	r24, 0xD0	; 208
+ 4c2:	89 0f       	add	r24, r25
+		uint8_t is_upper_hex = (*s >= 'A' && *s <= 'F');
+ 4c4:	91 54       	subi	r25, 0x41	; 65
+		if (!is_digit && !is_upper_hex) return 0;
+ 4c6:	8a 30       	cpi	r24, 0x0A	; 10
+ 4c8:	10 f0       	brcs	.+4      	; 0x4ce <IsAllHexDigits+0x18>
+ 4ca:	96 30       	cpi	r25, 0x06	; 6
+ 4cc:	40 f4       	brcc	.+16     	; 0x4de <IsAllHexDigits+0x28>
+		s++;
+ 4ce:	31 96       	adiw	r30, 0x01	; 1
+}
+
+uint8_t IsAllHexDigits(const char *s)
+{
+	if (*s == '\0') return 0;
+	while (*s)
+ 4d0:	90 81       	ld	r25, Z
+ 4d2:	91 11       	cpse	r25, r1
+ 4d4:	f5 cf       	rjmp	.-22     	; 0x4c0 <IsAllHexDigits+0xa>
+		uint8_t is_digit = (*s >= '0' && *s <= '9');
+		uint8_t is_upper_hex = (*s >= 'A' && *s <= 'F');
+		if (!is_digit && !is_upper_hex) return 0;
+		s++;
+	}
+	return 1;
+ 4d6:	81 e0       	ldi	r24, 0x01	; 1
+ 4d8:	08 95       	ret
+	return 1;
+}
+
+uint8_t IsAllHexDigits(const char *s)
+{
+	if (*s == '\0') return 0;
+ 4da:	80 e0       	ldi	r24, 0x00	; 0
+ 4dc:	08 95       	ret
+	while (*s)
+	{
+		uint8_t is_digit = (*s >= '0' && *s <= '9');
+		uint8_t is_upper_hex = (*s >= 'A' && *s <= 'F');
+		if (!is_digit && !is_upper_hex) return 0;
+ 4de:	80 e0       	ldi	r24, 0x00	; 0
+		s++;
+	}
+	return 1;
+}
+ 4e0:	08 95       	ret
+
+000004e2 <HexToUint32>:
+
+uint32_t HexToUint32(const char *s)
+{
+ 4e2:	fc 01       	movw	r30, r24
+	uint32_t val = 0;
+ 4e4:	80 e0       	ldi	r24, 0x00	; 0
+ 4e6:	90 e0       	ldi	r25, 0x00	; 0
+ 4e8:	dc 01       	movw	r26, r24
+	while (*s)
+ 4ea:	30 c0       	rjmp	.+96     	; 0x54c <HexToUint32+0x6a>
+	{
+		val <<= 4;
+ 4ec:	88 0f       	add	r24, r24
+ 4ee:	99 1f       	adc	r25, r25
+ 4f0:	aa 1f       	adc	r26, r26
+ 4f2:	bb 1f       	adc	r27, r27
+ 4f4:	88 0f       	add	r24, r24
+ 4f6:	99 1f       	adc	r25, r25
+ 4f8:	aa 1f       	adc	r26, r26
+ 4fa:	bb 1f       	adc	r27, r27
+ 4fc:	88 0f       	add	r24, r24
+ 4fe:	99 1f       	adc	r25, r25
+ 500:	aa 1f       	adc	r26, r26
+ 502:	bb 1f       	adc	r27, r27
+ 504:	88 0f       	add	r24, r24
+ 506:	99 1f       	adc	r25, r25
+ 508:	aa 1f       	adc	r26, r26
+ 50a:	bb 1f       	adc	r27, r27
+		if (*s >= '0' && *s <= '9') val |= (uint32_t)(*s - '0');
+ 50c:	20 ed       	ldi	r18, 0xD0	; 208
+ 50e:	24 0f       	add	r18, r20
+ 510:	2a 30       	cpi	r18, 0x0A	; 10
+ 512:	60 f4       	brcc	.+24     	; 0x52c <HexToUint32+0x4a>
+ 514:	50 e0       	ldi	r21, 0x00	; 0
+ 516:	40 53       	subi	r20, 0x30	; 48
+ 518:	51 09       	sbc	r21, r1
+ 51a:	05 2e       	mov	r0, r21
+ 51c:	00 0c       	add	r0, r0
+ 51e:	66 0b       	sbc	r22, r22
+ 520:	77 0b       	sbc	r23, r23
+ 522:	84 2b       	or	r24, r20
+ 524:	95 2b       	or	r25, r21
+ 526:	a6 2b       	or	r26, r22
+ 528:	b7 2b       	or	r27, r23
+ 52a:	0f c0       	rjmp	.+30     	; 0x54a <HexToUint32+0x68>
+		else if (*s >= 'A' && *s <= 'F') val |= (uint32_t)(*s - 'A' + 10);
+ 52c:	2f eb       	ldi	r18, 0xBF	; 191
+ 52e:	24 0f       	add	r18, r20
+ 530:	26 30       	cpi	r18, 0x06	; 6
+ 532:	58 f4       	brcc	.+22     	; 0x54a <HexToUint32+0x68>
+ 534:	50 e0       	ldi	r21, 0x00	; 0
+ 536:	47 53       	subi	r20, 0x37	; 55
+ 538:	51 09       	sbc	r21, r1
+ 53a:	05 2e       	mov	r0, r21
+ 53c:	00 0c       	add	r0, r0
+ 53e:	66 0b       	sbc	r22, r22
+ 540:	77 0b       	sbc	r23, r23
+ 542:	84 2b       	or	r24, r20
+ 544:	95 2b       	or	r25, r21
+ 546:	a6 2b       	or	r26, r22
+ 548:	b7 2b       	or	r27, r23
+		s++;
+ 54a:	31 96       	adiw	r30, 0x01	; 1
+}
+
+uint32_t HexToUint32(const char *s)
+{
+	uint32_t val = 0;
+	while (*s)
+ 54c:	40 81       	ld	r20, Z
+ 54e:	41 11       	cpse	r20, r1
+ 550:	cd cf       	rjmp	.-102    	; 0x4ec <HexToUint32+0xa>
+		if (*s >= '0' && *s <= '9') val |= (uint32_t)(*s - '0');
+		else if (*s >= 'A' && *s <= 'F') val |= (uint32_t)(*s - 'A' + 10);
+		s++;
+	}
+	return val;
+}
+ 552:	bc 01       	movw	r22, r24
+ 554:	cd 01       	movw	r24, r26
+ 556:	08 95       	ret
+
+00000558 <DecToUint32>:
+
+uint32_t DecToUint32(const char *s)
+{
+ 558:	0f 93       	push	r16
+ 55a:	1f 93       	push	r17
+ 55c:	fc 01       	movw	r30, r24
+	uint32_t val = 0;
+ 55e:	60 e0       	ldi	r22, 0x00	; 0
+ 560:	70 e0       	ldi	r23, 0x00	; 0
+ 562:	cb 01       	movw	r24, r22
+	while (*s)
+ 564:	24 c0       	rjmp	.+72     	; 0x5ae <DecToUint32+0x56>
+	{
+		val = val * 10 + (uint32_t)(*s - '0');
+ 566:	dc 01       	movw	r26, r24
+ 568:	cb 01       	movw	r24, r22
+ 56a:	88 0f       	add	r24, r24
+ 56c:	99 1f       	adc	r25, r25
+ 56e:	aa 1f       	adc	r26, r26
+ 570:	bb 1f       	adc	r27, r27
+ 572:	8c 01       	movw	r16, r24
+ 574:	9d 01       	movw	r18, r26
+ 576:	00 0f       	add	r16, r16
+ 578:	11 1f       	adc	r17, r17
+ 57a:	22 1f       	adc	r18, r18
+ 57c:	33 1f       	adc	r19, r19
+ 57e:	00 0f       	add	r16, r16
+ 580:	11 1f       	adc	r17, r17
+ 582:	22 1f       	adc	r18, r18
+ 584:	33 1f       	adc	r19, r19
+ 586:	80 0f       	add	r24, r16
+ 588:	91 1f       	adc	r25, r17
+ 58a:	a2 1f       	adc	r26, r18
+ 58c:	b3 1f       	adc	r27, r19
+ 58e:	50 e0       	ldi	r21, 0x00	; 0
+ 590:	40 53       	subi	r20, 0x30	; 48
+ 592:	51 09       	sbc	r21, r1
+ 594:	05 2e       	mov	r0, r21
+ 596:	00 0c       	add	r0, r0
+ 598:	66 0b       	sbc	r22, r22
+ 59a:	77 0b       	sbc	r23, r23
+ 59c:	8c 01       	movw	r16, r24
+ 59e:	9d 01       	movw	r18, r26
+ 5a0:	04 0f       	add	r16, r20
+ 5a2:	15 1f       	adc	r17, r21
+ 5a4:	26 1f       	adc	r18, r22
+ 5a6:	37 1f       	adc	r19, r23
+ 5a8:	c9 01       	movw	r24, r18
+ 5aa:	b8 01       	movw	r22, r16
+		s++;
+ 5ac:	31 96       	adiw	r30, 0x01	; 1
+}
+
+uint32_t DecToUint32(const char *s)
+{
+	uint32_t val = 0;
+	while (*s)
+ 5ae:	40 81       	ld	r20, Z
+ 5b0:	41 11       	cpse	r20, r1
+ 5b2:	d9 cf       	rjmp	.-78     	; 0x566 <DecToUint32+0xe>
+	{
+		val = val * 10 + (uint32_t)(*s - '0');
+		s++;
+	}
+	return val;
+}
+ 5b4:	1f 91       	pop	r17
+ 5b6:	0f 91       	pop	r16
+ 5b8:	08 95       	ret
+
+000005ba <Uint32ToHex8>:
+
+void Uint32ToHex8(uint32_t val, char *out)
+{
+ 5ba:	cf 92       	push	r12
+ 5bc:	df 92       	push	r13
+ 5be:	ef 92       	push	r14
+ 5c0:	ff 92       	push	r15
+ 5c2:	0f 93       	push	r16
+ 5c4:	1f 93       	push	r17
+ 5c6:	cf 93       	push	r28
+ 5c8:	df 93       	push	r29
+ 5ca:	cd b7       	in	r28, 0x3d	; 61
+ 5cc:	de b7       	in	r29, 0x3e	; 62
+ 5ce:	61 97       	sbiw	r28, 0x11	; 17
+ 5d0:	0f b6       	in	r0, 0x3f	; 63
+ 5d2:	f8 94       	cli
+ 5d4:	de bf       	out	0x3e, r29	; 62
+ 5d6:	0f be       	out	0x3f, r0	; 63
+ 5d8:	cd bf       	out	0x3d, r28	; 61
+ 5da:	6b 01       	movw	r12, r22
+ 5dc:	7c 01       	movw	r14, r24
+	const char hex_chars[] = "0123456789ABCDEF";
+ 5de:	81 e1       	ldi	r24, 0x11	; 17
+ 5e0:	ee e3       	ldi	r30, 0x3E	; 62
+ 5e2:	f1 e0       	ldi	r31, 0x01	; 1
+ 5e4:	de 01       	movw	r26, r28
+ 5e6:	11 96       	adiw	r26, 0x01	; 1
+ 5e8:	01 90       	ld	r0, Z+
+ 5ea:	0d 92       	st	X+, r0
+ 5ec:	8a 95       	dec	r24
+ 5ee:	e1 f7       	brne	.-8      	; 0x5e8 <Uint32ToHex8+0x2e>
+	for (int8_t i = 7; i >= 0; i--)
+ 5f0:	87 e0       	ldi	r24, 0x07	; 7
+ 5f2:	1c c0       	rjmp	.+56     	; 0x62c <Uint32ToHex8+0x72>
+	{
+		out[i] = hex_chars[val & 0xF];
+ 5f4:	fa 01       	movw	r30, r20
+ 5f6:	e8 0f       	add	r30, r24
+ 5f8:	f1 1d       	adc	r31, r1
+ 5fa:	87 fd       	sbrc	r24, 7
+ 5fc:	fa 95       	dec	r31
+ 5fe:	97 01       	movw	r18, r14
+ 600:	86 01       	movw	r16, r12
+ 602:	0f 70       	andi	r16, 0x0F	; 15
+ 604:	11 27       	eor	r17, r17
+ 606:	22 27       	eor	r18, r18
+ 608:	33 27       	eor	r19, r19
+ 60a:	a1 e0       	ldi	r26, 0x01	; 1
+ 60c:	b0 e0       	ldi	r27, 0x00	; 0
+ 60e:	ac 0f       	add	r26, r28
+ 610:	bd 1f       	adc	r27, r29
+ 612:	a0 0f       	add	r26, r16
+ 614:	b1 1f       	adc	r27, r17
+ 616:	9c 91       	ld	r25, X
+ 618:	90 83       	st	Z, r25
+		val >>= 4;
+ 61a:	68 94       	set
+ 61c:	13 f8       	bld	r1, 3
+ 61e:	f6 94       	lsr	r15
+ 620:	e7 94       	ror	r14
+ 622:	d7 94       	ror	r13
+ 624:	c7 94       	ror	r12
+ 626:	16 94       	lsr	r1
+ 628:	d1 f7       	brne	.-12     	; 0x61e <Uint32ToHex8+0x64>
+}
+
+void Uint32ToHex8(uint32_t val, char *out)
+{
+	const char hex_chars[] = "0123456789ABCDEF";
+	for (int8_t i = 7; i >= 0; i--)
+ 62a:	81 50       	subi	r24, 0x01	; 1
+ 62c:	88 23       	and	r24, r24
+ 62e:	14 f7       	brge	.-60     	; 0x5f4 <Uint32ToHex8+0x3a>
+	{
+		out[i] = hex_chars[val & 0xF];
+		val >>= 4;
+	}
+	out[8] = '\0';
+ 630:	fa 01       	movw	r30, r20
+ 632:	10 86       	std	Z+8, r1	; 0x08
+}
+ 634:	61 96       	adiw	r28, 0x11	; 17
+ 636:	0f b6       	in	r0, 0x3f	; 63
+ 638:	f8 94       	cli
+ 63a:	de bf       	out	0x3e, r29	; 62
+ 63c:	0f be       	out	0x3f, r0	; 63
+ 63e:	cd bf       	out	0x3d, r28	; 61
+ 640:	df 91       	pop	r29
+ 642:	cf 91       	pop	r28
+ 644:	1f 91       	pop	r17
+ 646:	0f 91       	pop	r16
+ 648:	ff 90       	pop	r15
+ 64a:	ef 90       	pop	r14
+ 64c:	df 90       	pop	r13
+ 64e:	cf 90       	pop	r12
+ 650:	08 95       	ret
+
+00000652 <Parse_CmdType>:
+
+// ==================== 명령 타입 판별 ====================
+CmdType_t Parse_CmdType(const char *field0)
+{
+ 652:	cf 93       	push	r28
+ 654:	df 93       	push	r29
+ 656:	ec 01       	movw	r28, r24
+	if (strcmp(field0, "MOVE") == 0)     return CMD_MOVE;
+ 658:	60 e0       	ldi	r22, 0x00	; 0
+ 65a:	71 e0       	ldi	r23, 0x01	; 1
+ 65c:	46 d3       	rcall	.+1676   	; 0xcea <strcmp>
+ 65e:	89 2b       	or	r24, r25
+ 660:	71 f0       	breq	.+28     	; 0x67e <Parse_CmdType+0x2c>
+	if (strcmp(field0, "DISPENSE") == 0) return CMD_DISPENSE;
+ 662:	65 e0       	ldi	r22, 0x05	; 5
+ 664:	71 e0       	ldi	r23, 0x01	; 1
+ 666:	ce 01       	movw	r24, r28
+ 668:	40 d3       	rcall	.+1664   	; 0xcea <strcmp>
+ 66a:	89 2b       	or	r24, r25
+ 66c:	51 f0       	breq	.+20     	; 0x682 <Parse_CmdType+0x30>
+	if (strcmp(field0, "ACK") == 0)      return CMD_ACK;
+ 66e:	6f e4       	ldi	r22, 0x4F	; 79
+ 670:	71 e0       	ldi	r23, 0x01	; 1
+ 672:	ce 01       	movw	r24, r28
+ 674:	3a d3       	rcall	.+1652   	; 0xcea <strcmp>
+ 676:	89 2b       	or	r24, r25
+ 678:	31 f4       	brne	.+12     	; 0x686 <Parse_CmdType+0x34>
+ 67a:	82 e0       	ldi	r24, 0x02	; 2
+ 67c:	05 c0       	rjmp	.+10     	; 0x688 <Parse_CmdType+0x36>
+}
+
+// ==================== 명령 타입 판별 ====================
+CmdType_t Parse_CmdType(const char *field0)
+{
+	if (strcmp(field0, "MOVE") == 0)     return CMD_MOVE;
+ 67e:	80 e0       	ldi	r24, 0x00	; 0
+ 680:	03 c0       	rjmp	.+6      	; 0x688 <Parse_CmdType+0x36>
+	if (strcmp(field0, "DISPENSE") == 0) return CMD_DISPENSE;
+ 682:	81 e0       	ldi	r24, 0x01	; 1
+ 684:	01 c0       	rjmp	.+2      	; 0x688 <Parse_CmdType+0x36>
+	if (strcmp(field0, "ACK") == 0)      return CMD_ACK;
+	return CMD_UNKNOWN;
+ 686:	83 e0       	ldi	r24, 0x03	; 3
+}
+ 688:	df 91       	pop	r29
+ 68a:	cf 91       	pop	r28
+ 68c:	08 95       	ret
+
+0000068e <Parse_MOVE>:
+
+// ==================== MOVE 파서 ====================
+uint8_t Parse_MOVE(const char *frame, MoveCmd_t *out)
+{
+ 68e:	8f 92       	push	r8
+ 690:	9f 92       	push	r9
+ 692:	af 92       	push	r10
+ 694:	bf 92       	push	r11
+ 696:	ef 92       	push	r14
+ 698:	ff 92       	push	r15
+ 69a:	0f 93       	push	r16
+ 69c:	1f 93       	push	r17
+ 69e:	cf 93       	push	r28
+ 6a0:	df 93       	push	r29
+ 6a2:	cd b7       	in	r28, 0x3d	; 61
+ 6a4:	de b7       	in	r29, 0x3e	; 62
+ 6a6:	c0 56       	subi	r28, 0x60	; 96
+ 6a8:	d1 09       	sbc	r29, r1
+ 6aa:	0f b6       	in	r0, 0x3f	; 63
+ 6ac:	f8 94       	cli
+ 6ae:	de bf       	out	0x3e, r29	; 62
+ 6b0:	0f be       	out	0x3f, r0	; 63
+ 6b2:	cd bf       	out	0x3d, r28	; 61
+ 6b4:	8b 01       	movw	r16, r22
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+ 6b6:	46 e0       	ldi	r20, 0x06	; 6
+ 6b8:	be 01       	movw	r22, r28
+ 6ba:	6f 5f       	subi	r22, 0xFF	; 255
+ 6bc:	7f 4f       	sbci	r23, 0xFF	; 255
+ 6be:	b7 de       	rcall	.-658    	; 0x42e <Split_Fields>
+
+	if (n != 5) return 1;
+ 6c0:	85 30       	cpi	r24, 0x05	; 5
+ 6c2:	09 f0       	breq	.+2      	; 0x6c6 <Parse_MOVE+0x38>
+ 6c4:	7c c0       	rjmp	.+248    	; 0x7be <Parse_MOVE+0x130>
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 6c6:	de 01       	movw	r26, r28
+ 6c8:	51 96       	adiw	r26, 0x11	; 17
+ 6ca:	fd 01       	movw	r30, r26
+ 6cc:	01 90       	ld	r0, Z+
+ 6ce:	00 20       	and	r0, r0
+ 6d0:	e9 f7       	brne	.-6      	; 0x6cc <Parse_MOVE+0x3e>
+ 6d2:	31 97       	sbiw	r30, 0x01	; 1
+ 6d4:	ea 1b       	sub	r30, r26
+ 6d6:	fb 0b       	sbc	r31, r27
+ 6d8:	38 97       	sbiw	r30, 0x08	; 8
+ 6da:	09 f0       	breq	.+2      	; 0x6de <Parse_MOVE+0x50>
+ 6dc:	72 c0       	rjmp	.+228    	; 0x7c2 <Parse_MOVE+0x134>
+ 6de:	cd 01       	movw	r24, r26
+ 6e0:	ea de       	rcall	.-556    	; 0x4b6 <IsAllHexDigits>
+ 6e2:	88 23       	and	r24, r24
+ 6e4:	09 f4       	brne	.+2      	; 0x6e8 <Parse_MOVE+0x5a>
+ 6e6:	6f c0       	rjmp	.+222    	; 0x7c6 <Parse_MOVE+0x138>
+	if (strlen(fields[2]) != 1 || strlen(fields[3]) != 1) return 1;
+ 6e8:	de 01       	movw	r26, r28
+ 6ea:	91 96       	adiw	r26, 0x21	; 33
+ 6ec:	fd 01       	movw	r30, r26
+ 6ee:	01 90       	ld	r0, Z+
+ 6f0:	00 20       	and	r0, r0
+ 6f2:	e9 f7       	brne	.-6      	; 0x6ee <Parse_MOVE+0x60>
+ 6f4:	31 97       	sbiw	r30, 0x01	; 1
+ 6f6:	ea 1b       	sub	r30, r26
+ 6f8:	fb 0b       	sbc	r31, r27
+ 6fa:	31 97       	sbiw	r30, 0x01	; 1
+ 6fc:	09 f0       	breq	.+2      	; 0x700 <Parse_MOVE+0x72>
+ 6fe:	65 c0       	rjmp	.+202    	; 0x7ca <Parse_MOVE+0x13c>
+ 700:	50 96       	adiw	r26, 0x10	; 16
+ 702:	fd 01       	movw	r30, r26
+ 704:	01 90       	ld	r0, Z+
+ 706:	00 20       	and	r0, r0
+ 708:	e9 f7       	brne	.-6      	; 0x704 <Parse_MOVE+0x76>
+ 70a:	31 97       	sbiw	r30, 0x01	; 1
+ 70c:	ea 1b       	sub	r30, r26
+ 70e:	fb 0b       	sbc	r31, r27
+ 710:	31 97       	sbiw	r30, 0x01	; 1
+ 712:	09 f0       	breq	.+2      	; 0x716 <Parse_MOVE+0x88>
+ 714:	5c c0       	rjmp	.+184    	; 0x7ce <Parse_MOVE+0x140>
+	if (!IsAllDigits(fields[2]) || !IsAllDigits(fields[3])) return 1;
+ 716:	ce 01       	movw	r24, r28
+ 718:	81 96       	adiw	r24, 0x21	; 33
+ 71a:	bb de       	rcall	.-650    	; 0x492 <IsAllDigits>
+ 71c:	88 23       	and	r24, r24
+ 71e:	09 f4       	brne	.+2      	; 0x722 <Parse_MOVE+0x94>
+ 720:	58 c0       	rjmp	.+176    	; 0x7d2 <Parse_MOVE+0x144>
+ 722:	ce 01       	movw	r24, r28
+ 724:	c1 96       	adiw	r24, 0x31	; 49
+ 726:	b5 de       	rcall	.-662    	; 0x492 <IsAllDigits>
+ 728:	88 23       	and	r24, r24
+ 72a:	09 f4       	brne	.+2      	; 0x72e <Parse_MOVE+0xa0>
+ 72c:	54 c0       	rjmp	.+168    	; 0x7d6 <Parse_MOVE+0x148>
+ 72e:	de 01       	movw	r26, r28
+	if (strlen(fields[4]) != 6 || !IsAllDigits(fields[4])) return 1;
+ 730:	af 5b       	subi	r26, 0xBF	; 191
+ 732:	bf 4f       	sbci	r27, 0xFF	; 255
+ 734:	fd 01       	movw	r30, r26
+ 736:	01 90       	ld	r0, Z+
+ 738:	00 20       	and	r0, r0
+ 73a:	e9 f7       	brne	.-6      	; 0x736 <Parse_MOVE+0xa8>
+ 73c:	31 97       	sbiw	r30, 0x01	; 1
+ 73e:	ea 1b       	sub	r30, r26
+ 740:	fb 0b       	sbc	r31, r27
+ 742:	36 97       	sbiw	r30, 0x06	; 6
+ 744:	09 f0       	breq	.+2      	; 0x748 <Parse_MOVE+0xba>
+ 746:	49 c0       	rjmp	.+146    	; 0x7da <Parse_MOVE+0x14c>
+ 748:	cd 01       	movw	r24, r26
+ 74a:	a3 de       	rcall	.-698    	; 0x492 <IsAllDigits>
+ 74c:	88 23       	and	r24, r24
+ 74e:	09 f4       	brne	.+2      	; 0x752 <Parse_MOVE+0xc4>
+ 750:	46 c0       	rjmp	.+140    	; 0x7de <Parse_MOVE+0x150>
+
+	out->req_id = HexToUint32(fields[1]);
+ 752:	ce 01       	movw	r24, r28
+ 754:	41 96       	adiw	r24, 0x11	; 17
+ 756:	c5 de       	rcall	.-630    	; 0x4e2 <HexToUint32>
+ 758:	f8 01       	movw	r30, r16
+ 75a:	60 83       	st	Z, r22
+ 75c:	71 83       	std	Z+1, r23	; 0x01
+ 75e:	82 83       	std	Z+2, r24	; 0x02
+ 760:	93 83       	std	Z+3, r25	; 0x03
+ 762:	89 a1       	ldd	r24, Y+33	; 0x21
+
+	uint8_t x = (uint8_t)(fields[2][0] - '0');
+ 764:	0f 2e       	mov	r0, r31
+ 766:	f0 ed       	ldi	r31, 0xD0	; 208
+ 768:	ef 2e       	mov	r14, r31
+ 76a:	f0 2d       	mov	r31, r0
+ 76c:	e8 0e       	add	r14, r24
+ 76e:	89 a9       	ldd	r24, Y+49	; 0x31
+	uint8_t y = (uint8_t)(fields[3][0] - '0');
+ 770:	0f 2e       	mov	r0, r31
+ 772:	f0 ed       	ldi	r31, 0xD0	; 208
+ 774:	ff 2e       	mov	r15, r31
+ 776:	f0 2d       	mov	r31, r0
+ 778:	f8 0e       	add	r15, r24
+ 77a:	f1 e0       	ldi	r31, 0x01	; 1
+	if (x > 1 || y > 4) return 2;
+ 77c:	fe 15       	cp	r31, r14
+ 77e:	88 f1       	brcs	.+98     	; 0x7e2 <Parse_MOVE+0x154>
+ 780:	24 e0       	ldi	r18, 0x04	; 4
+ 782:	2f 15       	cp	r18, r15
+ 784:	80 f1       	brcs	.+96     	; 0x7e6 <Parse_MOVE+0x158>
+
+	uint32_t sec = DecToUint32(fields[4]);
+ 786:	ce 01       	movw	r24, r28
+ 788:	8f 5b       	subi	r24, 0xBF	; 191
+ 78a:	9f 4f       	sbci	r25, 0xFF	; 255
+ 78c:	e5 de       	rcall	.-566    	; 0x558 <DecToUint32>
+ 78e:	4b 01       	movw	r8, r22
+	if (sec < 1 || sec > 999999) return 3;
+ 790:	5c 01       	movw	r10, r24
+ 792:	e1 e0       	ldi	r30, 0x01	; 1
+ 794:	8e 1a       	sub	r8, r30
+ 796:	91 08       	sbc	r9, r1
+ 798:	a1 08       	sbc	r10, r1
+ 79a:	b1 08       	sbc	r11, r1
+ 79c:	ff e3       	ldi	r31, 0x3F	; 63
+ 79e:	8f 16       	cp	r8, r31
+ 7a0:	f2 e4       	ldi	r31, 0x42	; 66
+ 7a2:	9f 06       	cpc	r9, r31
+ 7a4:	ff e0       	ldi	r31, 0x0F	; 15
+ 7a6:	af 06       	cpc	r10, r31
+ 7a8:	b1 04       	cpc	r11, r1
+ 7aa:	f8 f4       	brcc	.+62     	; 0x7ea <Parse_MOVE+0x15c>
+ 7ac:	f8 01       	movw	r30, r16
+
+	out->x = x;
+ 7ae:	e4 82       	std	Z+4, r14	; 0x04
+ 7b0:	f5 82       	std	Z+5, r15	; 0x05
+	out->y = y;
+ 7b2:	66 83       	std	Z+6, r22	; 0x06
+	out->allowed_sec = sec;
+ 7b4:	77 83       	std	Z+7, r23	; 0x07
+ 7b6:	80 87       	std	Z+8, r24	; 0x08
+ 7b8:	91 87       	std	Z+9, r25	; 0x09
+ 7ba:	80 e0       	ldi	r24, 0x00	; 0
+	return 0;
+ 7bc:	17 c0       	rjmp	.+46     	; 0x7ec <Parse_MOVE+0x15e>
+ 7be:	81 e0       	ldi	r24, 0x01	; 1
+uint8_t Parse_MOVE(const char *frame, MoveCmd_t *out)
+{
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+
+	if (n != 5) return 1;
+ 7c0:	15 c0       	rjmp	.+42     	; 0x7ec <Parse_MOVE+0x15e>
+ 7c2:	81 e0       	ldi	r24, 0x01	; 1
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 7c4:	13 c0       	rjmp	.+38     	; 0x7ec <Parse_MOVE+0x15e>
+ 7c6:	81 e0       	ldi	r24, 0x01	; 1
+ 7c8:	11 c0       	rjmp	.+34     	; 0x7ec <Parse_MOVE+0x15e>
+ 7ca:	81 e0       	ldi	r24, 0x01	; 1
+	if (strlen(fields[2]) != 1 || strlen(fields[3]) != 1) return 1;
+ 7cc:	0f c0       	rjmp	.+30     	; 0x7ec <Parse_MOVE+0x15e>
+ 7ce:	81 e0       	ldi	r24, 0x01	; 1
+ 7d0:	0d c0       	rjmp	.+26     	; 0x7ec <Parse_MOVE+0x15e>
+ 7d2:	81 e0       	ldi	r24, 0x01	; 1
+	if (!IsAllDigits(fields[2]) || !IsAllDigits(fields[3])) return 1;
+ 7d4:	0b c0       	rjmp	.+22     	; 0x7ec <Parse_MOVE+0x15e>
+ 7d6:	81 e0       	ldi	r24, 0x01	; 1
+ 7d8:	09 c0       	rjmp	.+18     	; 0x7ec <Parse_MOVE+0x15e>
+ 7da:	81 e0       	ldi	r24, 0x01	; 1
+	if (strlen(fields[4]) != 6 || !IsAllDigits(fields[4])) return 1;
+ 7dc:	07 c0       	rjmp	.+14     	; 0x7ec <Parse_MOVE+0x15e>
+ 7de:	81 e0       	ldi	r24, 0x01	; 1
+ 7e0:	05 c0       	rjmp	.+10     	; 0x7ec <Parse_MOVE+0x15e>
+ 7e2:	82 e0       	ldi	r24, 0x02	; 2
+
+	out->req_id = HexToUint32(fields[1]);
+
+	uint8_t x = (uint8_t)(fields[2][0] - '0');
+	uint8_t y = (uint8_t)(fields[3][0] - '0');
+	if (x > 1 || y > 4) return 2;
+ 7e4:	03 c0       	rjmp	.+6      	; 0x7ec <Parse_MOVE+0x15e>
+ 7e6:	82 e0       	ldi	r24, 0x02	; 2
+ 7e8:	01 c0       	rjmp	.+2      	; 0x7ec <Parse_MOVE+0x15e>
+ 7ea:	83 e0       	ldi	r24, 0x03	; 3
+
+	uint32_t sec = DecToUint32(fields[4]);
+	if (sec < 1 || sec > 999999) return 3;
+ 7ec:	c0 5a       	subi	r28, 0xA0	; 160
+
+	out->x = x;
+	out->y = y;
+	out->allowed_sec = sec;
+	return 0;
+}
+ 7ee:	df 4f       	sbci	r29, 0xFF	; 255
+ 7f0:	0f b6       	in	r0, 0x3f	; 63
+ 7f2:	f8 94       	cli
+ 7f4:	de bf       	out	0x3e, r29	; 62
+ 7f6:	0f be       	out	0x3f, r0	; 63
+ 7f8:	cd bf       	out	0x3d, r28	; 61
+ 7fa:	df 91       	pop	r29
+ 7fc:	cf 91       	pop	r28
+ 7fe:	1f 91       	pop	r17
+ 800:	0f 91       	pop	r16
+ 802:	ff 90       	pop	r15
+ 804:	ef 90       	pop	r14
+ 806:	bf 90       	pop	r11
+ 808:	af 90       	pop	r10
+ 80a:	9f 90       	pop	r9
+ 80c:	8f 90       	pop	r8
+ 80e:	08 95       	ret
+
+00000810 <Parse_DISPENSE>:
+ 810:	0f 93       	push	r16
+
+// ==================== DISPENSE 파서 ====================
+uint8_t Parse_DISPENSE(const char *frame, DispenseCmd_t *out)
+{
+ 812:	1f 93       	push	r17
+ 814:	cf 93       	push	r28
+ 816:	df 93       	push	r29
+ 818:	cd b7       	in	r28, 0x3d	; 61
+ 81a:	de b7       	in	r29, 0x3e	; 62
+ 81c:	c0 56       	subi	r28, 0x60	; 96
+ 81e:	d1 09       	sbc	r29, r1
+ 820:	0f b6       	in	r0, 0x3f	; 63
+ 822:	f8 94       	cli
+ 824:	de bf       	out	0x3e, r29	; 62
+ 826:	0f be       	out	0x3f, r0	; 63
+ 828:	cd bf       	out	0x3d, r28	; 61
+ 82a:	8b 01       	movw	r16, r22
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+ 82c:	46 e0       	ldi	r20, 0x06	; 6
+ 82e:	be 01       	movw	r22, r28
+ 830:	6f 5f       	subi	r22, 0xFF	; 255
+ 832:	7f 4f       	sbci	r23, 0xFF	; 255
+ 834:	fc dd       	rcall	.-1032   	; 0x42e <Split_Fields>
+
+	if (n != 4) return 1;
+ 836:	84 30       	cpi	r24, 0x04	; 4
+ 838:	09 f0       	breq	.+2      	; 0x83c <Parse_DISPENSE+0x2c>
+ 83a:	42 c0       	rjmp	.+132    	; 0x8c0 <Parse_DISPENSE+0xb0>
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 83c:	de 01       	movw	r26, r28
+ 83e:	51 96       	adiw	r26, 0x11	; 17
+ 840:	fd 01       	movw	r30, r26
+ 842:	01 90       	ld	r0, Z+
+ 844:	00 20       	and	r0, r0
+ 846:	e9 f7       	brne	.-6      	; 0x842 <Parse_DISPENSE+0x32>
+ 848:	31 97       	sbiw	r30, 0x01	; 1
+ 84a:	ea 1b       	sub	r30, r26
+ 84c:	fb 0b       	sbc	r31, r27
+ 84e:	38 97       	sbiw	r30, 0x08	; 8
+ 850:	c9 f5       	brne	.+114    	; 0x8c4 <Parse_DISPENSE+0xb4>
+ 852:	cd 01       	movw	r24, r26
+ 854:	30 de       	rcall	.-928    	; 0x4b6 <IsAllHexDigits>
+ 856:	88 23       	and	r24, r24
+ 858:	b9 f1       	breq	.+110    	; 0x8c8 <Parse_DISPENSE+0xb8>
+	if (strlen(fields[2]) != 1 || strlen(fields[3]) != 1) return 1;
+ 85a:	de 01       	movw	r26, r28
+ 85c:	91 96       	adiw	r26, 0x21	; 33
+ 85e:	fd 01       	movw	r30, r26
+ 860:	01 90       	ld	r0, Z+
+ 862:	00 20       	and	r0, r0
+ 864:	e9 f7       	brne	.-6      	; 0x860 <Parse_DISPENSE+0x50>
+ 866:	31 97       	sbiw	r30, 0x01	; 1
+ 868:	ea 1b       	sub	r30, r26
+ 86a:	fb 0b       	sbc	r31, r27
+ 86c:	31 97       	sbiw	r30, 0x01	; 1
+ 86e:	71 f5       	brne	.+92     	; 0x8cc <Parse_DISPENSE+0xbc>
+ 870:	50 96       	adiw	r26, 0x10	; 16
+ 872:	fd 01       	movw	r30, r26
+ 874:	01 90       	ld	r0, Z+
+ 876:	00 20       	and	r0, r0
+ 878:	e9 f7       	brne	.-6      	; 0x874 <Parse_DISPENSE+0x64>
+ 87a:	31 97       	sbiw	r30, 0x01	; 1
+ 87c:	ea 1b       	sub	r30, r26
+ 87e:	fb 0b       	sbc	r31, r27
+ 880:	31 97       	sbiw	r30, 0x01	; 1
+ 882:	31 f5       	brne	.+76     	; 0x8d0 <Parse_DISPENSE+0xc0>
+	if (!IsAllDigits(fields[2]) || !IsAllDigits(fields[3])) return 1;
+ 884:	ce 01       	movw	r24, r28
+ 886:	81 96       	adiw	r24, 0x21	; 33
+ 888:	04 de       	rcall	.-1016   	; 0x492 <IsAllDigits>
+ 88a:	88 23       	and	r24, r24
+ 88c:	19 f1       	breq	.+70     	; 0x8d4 <Parse_DISPENSE+0xc4>
+ 88e:	ce 01       	movw	r24, r28
+ 890:	c1 96       	adiw	r24, 0x31	; 49
+ 892:	ff dd       	rcall	.-1026   	; 0x492 <IsAllDigits>
+ 894:	88 23       	and	r24, r24
+ 896:	01 f1       	breq	.+64     	; 0x8d8 <Parse_DISPENSE+0xc8>
+
+	out->req_id = HexToUint32(fields[1]);
+ 898:	ce 01       	movw	r24, r28
+ 89a:	41 96       	adiw	r24, 0x11	; 17
+ 89c:	22 de       	rcall	.-956    	; 0x4e2 <HexToUint32>
+ 89e:	f8 01       	movw	r30, r16
+ 8a0:	60 83       	st	Z, r22
+ 8a2:	71 83       	std	Z+1, r23	; 0x01
+ 8a4:	82 83       	std	Z+2, r24	; 0x02
+ 8a6:	93 83       	std	Z+3, r25	; 0x03
+ 8a8:	99 a1       	ldd	r25, Y+33	; 0x21
+
+	uint8_t x = (uint8_t)(fields[2][0] - '0');
+ 8aa:	90 53       	subi	r25, 0x30	; 48
+ 8ac:	89 a9       	ldd	r24, Y+49	; 0x31
+	uint8_t y = (uint8_t)(fields[3][0] - '0');
+ 8ae:	80 53       	subi	r24, 0x30	; 48
+ 8b0:	92 30       	cpi	r25, 0x02	; 2
+	if (x > 1 || y > 4) return 2;
+ 8b2:	a0 f4       	brcc	.+40     	; 0x8dc <Parse_DISPENSE+0xcc>
+ 8b4:	85 30       	cpi	r24, 0x05	; 5
+ 8b6:	a0 f4       	brcc	.+40     	; 0x8e0 <Parse_DISPENSE+0xd0>
+ 8b8:	94 83       	std	Z+4, r25	; 0x04
+
+	out->x = x;
+ 8ba:	85 83       	std	Z+5, r24	; 0x05
+	out->y = y;
+ 8bc:	80 e0       	ldi	r24, 0x00	; 0
+	return 0;
+ 8be:	11 c0       	rjmp	.+34     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8c0:	81 e0       	ldi	r24, 0x01	; 1
+uint8_t Parse_DISPENSE(const char *frame, DispenseCmd_t *out)
+{
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+
+	if (n != 4) return 1;
+ 8c2:	0f c0       	rjmp	.+30     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8c4:	81 e0       	ldi	r24, 0x01	; 1
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 8c6:	0d c0       	rjmp	.+26     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8c8:	81 e0       	ldi	r24, 0x01	; 1
+ 8ca:	0b c0       	rjmp	.+22     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8cc:	81 e0       	ldi	r24, 0x01	; 1
+	if (strlen(fields[2]) != 1 || strlen(fields[3]) != 1) return 1;
+ 8ce:	09 c0       	rjmp	.+18     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8d0:	81 e0       	ldi	r24, 0x01	; 1
+ 8d2:	07 c0       	rjmp	.+14     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8d4:	81 e0       	ldi	r24, 0x01	; 1
+	if (!IsAllDigits(fields[2]) || !IsAllDigits(fields[3])) return 1;
+ 8d6:	05 c0       	rjmp	.+10     	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8d8:	81 e0       	ldi	r24, 0x01	; 1
+ 8da:	03 c0       	rjmp	.+6      	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8dc:	82 e0       	ldi	r24, 0x02	; 2
+
+	out->req_id = HexToUint32(fields[1]);
+
+	uint8_t x = (uint8_t)(fields[2][0] - '0');
+	uint8_t y = (uint8_t)(fields[3][0] - '0');
+	if (x > 1 || y > 4) return 2;
+ 8de:	01 c0       	rjmp	.+2      	; 0x8e2 <Parse_DISPENSE+0xd2>
+ 8e0:	82 e0       	ldi	r24, 0x02	; 2
+ 8e2:	c0 5a       	subi	r28, 0xA0	; 160
+
+	out->x = x;
+	out->y = y;
+	return 0;
+}
+ 8e4:	df 4f       	sbci	r29, 0xFF	; 255
+ 8e6:	0f b6       	in	r0, 0x3f	; 63
+ 8e8:	f8 94       	cli
+ 8ea:	de bf       	out	0x3e, r29	; 62
+ 8ec:	0f be       	out	0x3f, r0	; 63
+ 8ee:	cd bf       	out	0x3d, r28	; 61
+ 8f0:	df 91       	pop	r29
+ 8f2:	cf 91       	pop	r28
+ 8f4:	1f 91       	pop	r17
+ 8f6:	0f 91       	pop	r16
+ 8f8:	08 95       	ret
+
+000008fa <Parse_ACK_RESULT>:
+ 8fa:	0f 93       	push	r16
+
+// ==================== ACK(RESULT용) 파서 ====================
+uint8_t Parse_ACK_RESULT(const char *frame, uint32_t *req_id)
+{
+ 8fc:	1f 93       	push	r17
+ 8fe:	cf 93       	push	r28
+ 900:	df 93       	push	r29
+ 902:	cd b7       	in	r28, 0x3d	; 61
+ 904:	de b7       	in	r29, 0x3e	; 62
+ 906:	c0 56       	subi	r28, 0x60	; 96
+ 908:	d1 09       	sbc	r29, r1
+ 90a:	0f b6       	in	r0, 0x3f	; 63
+ 90c:	f8 94       	cli
+ 90e:	de bf       	out	0x3e, r29	; 62
+ 910:	0f be       	out	0x3f, r0	; 63
+ 912:	cd bf       	out	0x3d, r28	; 61
+ 914:	8b 01       	movw	r16, r22
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+ 916:	46 e0       	ldi	r20, 0x06	; 6
+ 918:	be 01       	movw	r22, r28
+ 91a:	6f 5f       	subi	r22, 0xFF	; 255
+ 91c:	7f 4f       	sbci	r23, 0xFF	; 255
+ 91e:	87 dd       	rcall	.-1266   	; 0x42e <Split_Fields>
+
+	if (n != 3) return 1;
+ 920:	83 30       	cpi	r24, 0x03	; 3
+ 922:	39 f5       	brne	.+78     	; 0x972 <Parse_ACK_RESULT+0x78>
+	if (strcmp(fields[0], "ACK") != 0) return 1;
+ 924:	6f e4       	ldi	r22, 0x4F	; 79
+ 926:	71 e0       	ldi	r23, 0x01	; 1
+ 928:	ce 01       	movw	r24, r28
+ 92a:	01 96       	adiw	r24, 0x01	; 1
+ 92c:	de d1       	rcall	.+956    	; 0xcea <strcmp>
+ 92e:	89 2b       	or	r24, r25
+ 930:	11 f5       	brne	.+68     	; 0x976 <Parse_ACK_RESULT+0x7c>
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 932:	de 01       	movw	r26, r28
+ 934:	51 96       	adiw	r26, 0x11	; 17
+ 936:	fd 01       	movw	r30, r26
+ 938:	01 90       	ld	r0, Z+
+ 93a:	00 20       	and	r0, r0
+ 93c:	e9 f7       	brne	.-6      	; 0x938 <Parse_ACK_RESULT+0x3e>
+ 93e:	31 97       	sbiw	r30, 0x01	; 1
+ 940:	ea 1b       	sub	r30, r26
+ 942:	fb 0b       	sbc	r31, r27
+ 944:	38 97       	sbiw	r30, 0x08	; 8
+ 946:	c9 f4       	brne	.+50     	; 0x97a <Parse_ACK_RESULT+0x80>
+ 948:	cd 01       	movw	r24, r26
+ 94a:	b5 dd       	rcall	.-1174   	; 0x4b6 <IsAllHexDigits>
+ 94c:	88 23       	and	r24, r24
+ 94e:	b9 f0       	breq	.+46     	; 0x97e <Parse_ACK_RESULT+0x84>
+	if (strcmp(fields[2], "RESULT") != 0) return 1;
+ 950:	63 e5       	ldi	r22, 0x53	; 83
+ 952:	71 e0       	ldi	r23, 0x01	; 1
+ 954:	ce 01       	movw	r24, r28
+ 956:	81 96       	adiw	r24, 0x21	; 33
+ 958:	c8 d1       	rcall	.+912    	; 0xcea <strcmp>
+ 95a:	89 2b       	or	r24, r25
+
+	*req_id = HexToUint32(fields[1]);
+ 95c:	91 f4       	brne	.+36     	; 0x982 <Parse_ACK_RESULT+0x88>
+ 95e:	ce 01       	movw	r24, r28
+ 960:	41 96       	adiw	r24, 0x11	; 17
+ 962:	bf dd       	rcall	.-1154   	; 0x4e2 <HexToUint32>
+ 964:	f8 01       	movw	r30, r16
+ 966:	60 83       	st	Z, r22
+ 968:	71 83       	std	Z+1, r23	; 0x01
+ 96a:	82 83       	std	Z+2, r24	; 0x02
+ 96c:	93 83       	std	Z+3, r25	; 0x03
+	return 0;
+ 96e:	80 e0       	ldi	r24, 0x00	; 0
+ 970:	09 c0       	rjmp	.+18     	; 0x984 <Parse_ACK_RESULT+0x8a>
+uint8_t Parse_ACK_RESULT(const char *frame, uint32_t *req_id)
+{
+	char fields[MAX_FIELDS][MAX_FIELD_LEN];
+	uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+
+	if (n != 3) return 1;
+ 972:	81 e0       	ldi	r24, 0x01	; 1
+ 974:	07 c0       	rjmp	.+14     	; 0x984 <Parse_ACK_RESULT+0x8a>
+	if (strcmp(fields[0], "ACK") != 0) return 1;
+ 976:	81 e0       	ldi	r24, 0x01	; 1
+ 978:	05 c0       	rjmp	.+10     	; 0x984 <Parse_ACK_RESULT+0x8a>
+	if (strlen(fields[1]) != 8 || !IsAllHexDigits(fields[1])) return 1;
+ 97a:	81 e0       	ldi	r24, 0x01	; 1
+ 97c:	03 c0       	rjmp	.+6      	; 0x984 <Parse_ACK_RESULT+0x8a>
+ 97e:	81 e0       	ldi	r24, 0x01	; 1
+ 980:	01 c0       	rjmp	.+2      	; 0x984 <Parse_ACK_RESULT+0x8a>
+	if (strcmp(fields[2], "RESULT") != 0) return 1;
+ 982:	81 e0       	ldi	r24, 0x01	; 1
+
+	*req_id = HexToUint32(fields[1]);
+	return 0;
+}
+ 984:	c0 5a       	subi	r28, 0xA0	; 160
+ 986:	df 4f       	sbci	r29, 0xFF	; 255
+ 988:	0f b6       	in	r0, 0x3f	; 63
+ 98a:	f8 94       	cli
+ 98c:	de bf       	out	0x3e, r29	; 62
+ 98e:	0f be       	out	0x3f, r0	; 63
+ 990:	cd bf       	out	0x3d, r28	; 61
+ 992:	df 91       	pop	r29
+ 994:	cf 91       	pop	r28
+ 996:	1f 91       	pop	r17
+ 998:	0f 91       	pop	r16
+ 99a:	08 95       	ret
+
+0000099c <Send_ACK>:
+
+// ==================== 응답 송신 ====================
+void Send_ACK(uint32_t req_id, const char *cmd_name)
+{
+ 99c:	0f 93       	push	r16
+ 99e:	1f 93       	push	r17
+ 9a0:	cf 93       	push	r28
+ 9a2:	df 93       	push	r29
+ 9a4:	cd b7       	in	r28, 0x3d	; 61
+ 9a6:	de b7       	in	r29, 0x3e	; 62
+ 9a8:	29 97       	sbiw	r28, 0x09	; 9
+ 9aa:	0f b6       	in	r0, 0x3f	; 63
+ 9ac:	f8 94       	cli
+ 9ae:	de bf       	out	0x3e, r29	; 62
+ 9b0:	0f be       	out	0x3f, r0	; 63
+ 9b2:	cd bf       	out	0x3d, r28	; 61
+ 9b4:	8a 01       	movw	r16, r20
+	char id_str[9];
+	Uint32ToHex8(req_id, id_str);
+ 9b6:	ae 01       	movw	r20, r28
+ 9b8:	4f 5f       	subi	r20, 0xFF	; 255
+ 9ba:	5f 4f       	sbci	r21, 0xFF	; 255
+ 9bc:	fe dd       	rcall	.-1028   	; 0x5ba <Uint32ToHex8>
+	UART0_TxString("ACK|");
+ 9be:	8a e5       	ldi	r24, 0x5A	; 90
+ 9c0:	91 e0       	ldi	r25, 0x01	; 1
+ 9c2:	a5 dc       	rcall	.-1718   	; 0x30e <UART0_TxString>
+	UART0_TxString(id_str);
+ 9c4:	ce 01       	movw	r24, r28
+ 9c6:	01 96       	adiw	r24, 0x01	; 1
+	UART0_TxChar('|');
+ 9c8:	a2 dc       	rcall	.-1724   	; 0x30e <UART0_TxString>
+ 9ca:	8c e7       	ldi	r24, 0x7C	; 124
+	UART0_TxString(cmd_name);
+ 9cc:	9c dc       	rcall	.-1736   	; 0x306 <UART0_TxChar>
+ 9ce:	c8 01       	movw	r24, r16
+	UART0_TxString("\n");
+ 9d0:	9e dc       	rcall	.-1732   	; 0x30e <UART0_TxString>
+ 9d2:	8c e3       	ldi	r24, 0x3C	; 60
+ 9d4:	91 e0       	ldi	r25, 0x01	; 1
+ 9d6:	9b dc       	rcall	.-1738   	; 0x30e <UART0_TxString>
+}
+ 9d8:	29 96       	adiw	r28, 0x09	; 9
+ 9da:	0f b6       	in	r0, 0x3f	; 63
+ 9dc:	f8 94       	cli
+ 9de:	de bf       	out	0x3e, r29	; 62
+ 9e0:	0f be       	out	0x3f, r0	; 63
+ 9e2:	cd bf       	out	0x3d, r28	; 61
+ 9e4:	df 91       	pop	r29
+ 9e6:	cf 91       	pop	r28
+ 9e8:	1f 91       	pop	r17
+ 9ea:	0f 91       	pop	r16
+ 9ec:	08 95       	ret
+
+000009ee <Send_WAIT>:
+
+void Send_WAIT(uint32_t req_id)
+{
+ 9ee:	cf 93       	push	r28
+ 9f0:	df 93       	push	r29
+ 9f2:	cd b7       	in	r28, 0x3d	; 61
+ 9f4:	de b7       	in	r29, 0x3e	; 62
+ 9f6:	29 97       	sbiw	r28, 0x09	; 9
+ 9f8:	0f b6       	in	r0, 0x3f	; 63
+ 9fa:	f8 94       	cli
+ 9fc:	de bf       	out	0x3e, r29	; 62
+ 9fe:	0f be       	out	0x3f, r0	; 63
+ a00:	cd bf       	out	0x3d, r28	; 61
+	char id_str[9];
+	Uint32ToHex8(req_id, id_str);
+ a02:	ae 01       	movw	r20, r28
+ a04:	4f 5f       	subi	r20, 0xFF	; 255
+ a06:	5f 4f       	sbci	r21, 0xFF	; 255
+ a08:	d8 dd       	rcall	.-1104   	; 0x5ba <Uint32ToHex8>
+	UART0_TxString("WAIT|");
+ a0a:	8f e5       	ldi	r24, 0x5F	; 95
+ a0c:	91 e0       	ldi	r25, 0x01	; 1
+ a0e:	7f dc       	rcall	.-1794   	; 0x30e <UART0_TxString>
+	UART0_TxString(id_str);
+ a10:	ce 01       	movw	r24, r28
+ a12:	01 96       	adiw	r24, 0x01	; 1
+ a14:	7c dc       	rcall	.-1800   	; 0x30e <UART0_TxString>
+	UART0_TxString("\n");
+ a16:	8c e3       	ldi	r24, 0x3C	; 60
+ a18:	91 e0       	ldi	r25, 0x01	; 1
+ a1a:	79 dc       	rcall	.-1806   	; 0x30e <UART0_TxString>
+ a1c:	29 96       	adiw	r28, 0x09	; 9
+}
+ a1e:	0f b6       	in	r0, 0x3f	; 63
+ a20:	f8 94       	cli
+ a22:	de bf       	out	0x3e, r29	; 62
+ a24:	0f be       	out	0x3f, r0	; 63
+ a26:	cd bf       	out	0x3d, r28	; 61
+ a28:	df 91       	pop	r29
+ a2a:	cf 91       	pop	r28
+ a2c:	08 95       	ret
+
+00000a2e <Send_RESULT>:
+ a2e:	ff 92       	push	r15
+
+void Send_RESULT(uint32_t req_id, uint8_t x, uint8_t y, uint8_t r)
+{
+ a30:	0f 93       	push	r16
+ a32:	1f 93       	push	r17
+ a34:	cf 93       	push	r28
+ a36:	df 93       	push	r29
+ a38:	cd b7       	in	r28, 0x3d	; 61
+ a3a:	de b7       	in	r29, 0x3e	; 62
+ a3c:	29 97       	sbiw	r28, 0x09	; 9
+ a3e:	0f b6       	in	r0, 0x3f	; 63
+ a40:	f8 94       	cli
+ a42:	de bf       	out	0x3e, r29	; 62
+ a44:	0f be       	out	0x3f, r0	; 63
+ a46:	cd bf       	out	0x3d, r28	; 61
+ a48:	f4 2e       	mov	r15, r20
+ a4a:	12 2f       	mov	r17, r18
+	char id_str[9];
+	Uint32ToHex8(req_id, id_str);
+ a4c:	ae 01       	movw	r20, r28
+ a4e:	4f 5f       	subi	r20, 0xFF	; 255
+ a50:	5f 4f       	sbci	r21, 0xFF	; 255
+ a52:	b3 dd       	rcall	.-1178   	; 0x5ba <Uint32ToHex8>
+	UART0_TxString("RESULT|");
+ a54:	85 e6       	ldi	r24, 0x65	; 101
+ a56:	91 e0       	ldi	r25, 0x01	; 1
+ a58:	5a dc       	rcall	.-1868   	; 0x30e <UART0_TxString>
+	UART0_TxString(id_str);
+ a5a:	ce 01       	movw	r24, r28
+ a5c:	01 96       	adiw	r24, 0x01	; 1
+	UART0_TxChar('|');
+ a5e:	57 dc       	rcall	.-1874   	; 0x30e <UART0_TxString>
+ a60:	8c e7       	ldi	r24, 0x7C	; 124
+	UART0_TxChar((char)('0' + x));
+ a62:	51 dc       	rcall	.-1886   	; 0x306 <UART0_TxChar>
+ a64:	80 e3       	ldi	r24, 0x30	; 48
+ a66:	8f 0d       	add	r24, r15
+	UART0_TxChar((char)('0' + y));
+ a68:	4e dc       	rcall	.-1892   	; 0x306 <UART0_TxChar>
+ a6a:	80 e3       	ldi	r24, 0x30	; 48
+ a6c:	81 0f       	add	r24, r17
+	UART0_TxChar((char)('0' + r));
+ a6e:	4b dc       	rcall	.-1898   	; 0x306 <UART0_TxChar>
+ a70:	80 e3       	ldi	r24, 0x30	; 48
+ a72:	80 0f       	add	r24, r16
+ a74:	48 dc       	rcall	.-1904   	; 0x306 <UART0_TxChar>
+	UART0_TxString("\n");
+ a76:	8c e3       	ldi	r24, 0x3C	; 60
+ a78:	91 e0       	ldi	r25, 0x01	; 1
+ a7a:	49 dc       	rcall	.-1902   	; 0x30e <UART0_TxString>
+ a7c:	29 96       	adiw	r28, 0x09	; 9
+}
+ a7e:	0f b6       	in	r0, 0x3f	; 63
+ a80:	f8 94       	cli
+ a82:	de bf       	out	0x3e, r29	; 62
+ a84:	0f be       	out	0x3f, r0	; 63
+ a86:	cd bf       	out	0x3d, r28	; 61
+ a88:	df 91       	pop	r29
+ a8a:	cf 91       	pop	r28
+ a8c:	1f 91       	pop	r17
+ a8e:	0f 91       	pop	r16
+ a90:	ff 90       	pop	r15
+ a92:	08 95       	ret
+
+00000a94 <Send_ERROR>:
+ a94:	0f 93       	push	r16
+
+void Send_ERROR(uint32_t req_id, const char *error_code)
+{
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  a96:	1f 93       	push	r17
  a98:	cf 93       	push	r28
  a9a:	df 93       	push	r29
@@ -1473,10 +3179,16 @@ void FSM_HandleResultAck(uint32_t req_id)
  aa8:	0f be       	out	0x3f, r0	; 63
  aaa:	cd bf       	out	0x3d, r28	; 61
  aac:	8a 01       	movw	r16, r20
+<<<<<<< HEAD
+=======
+	char id_str[9];
+	Uint32ToHex8(req_id, id_str);
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  aae:	ae 01       	movw	r20, r28
  ab0:	4f 5f       	subi	r20, 0xFF	; 255
  ab2:	5f 4f       	sbci	r21, 0xFF	; 255
  ab4:	82 dd       	rcall	.-1276   	; 0x5ba <Uint32ToHex8>
+<<<<<<< HEAD
  ab6:	8d e6       	ldi	r24, 0x6D	; 109
  ab8:	91 e0       	ldi	r25, 0x01	; 1
  aba:	29 dc       	rcall	.-1966   	; 0x30e <UART0_TxString>
@@ -1486,10 +3198,30 @@ void FSM_HandleResultAck(uint32_t req_id)
  ac2:	8c e7       	ldi	r24, 0x7C	; 124
  ac4:	20 dc       	rcall	.-1984   	; 0x306 <UART0_TxChar>
  ac6:	c8 01       	movw	r24, r16
+=======
+	UART0_TxString("ERROR|");
+ ab6:	8d e6       	ldi	r24, 0x6D	; 109
+ ab8:	91 e0       	ldi	r25, 0x01	; 1
+ aba:	29 dc       	rcall	.-1966   	; 0x30e <UART0_TxString>
+	UART0_TxString(id_str);
+ abc:	ce 01       	movw	r24, r28
+ abe:	01 96       	adiw	r24, 0x01	; 1
+	UART0_TxChar('|');
+ ac0:	26 dc       	rcall	.-1972   	; 0x30e <UART0_TxString>
+ ac2:	8c e7       	ldi	r24, 0x7C	; 124
+	UART0_TxString(error_code);
+ ac4:	20 dc       	rcall	.-1984   	; 0x306 <UART0_TxChar>
+ ac6:	c8 01       	movw	r24, r16
+	UART0_TxString("\n");
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  ac8:	22 dc       	rcall	.-1980   	; 0x30e <UART0_TxString>
  aca:	8c e3       	ldi	r24, 0x3C	; 60
  acc:	91 e0       	ldi	r25, 0x01	; 1
  ace:	1f dc       	rcall	.-1986   	; 0x30e <UART0_TxString>
+<<<<<<< HEAD
+=======
+}
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
  ad0:	29 96       	adiw	r28, 0x09	; 9
  ad2:	0f b6       	in	r0, 0x3f	; 63
  ad4:	f8 94       	cli
@@ -1503,6 +3235,7 @@ void FSM_HandleResultAck(uint32_t req_id)
  ae4:	08 95       	ret
 
 00000ae6 <Task_UartRxProcess>:
+<<<<<<< HEAD
  ae6:	1f 93       	push	r17
  ae8:	cf 93       	push	r28
  aea:	df 93       	push	r29
@@ -1804,5 +3537,431 @@ void FSM_HandleResultAck(uint32_t req_id)
 00000d1c <_exit>:
  d1c:	f8 94       	cli
 
+=======
+
+// ==================== 통합 처리 태스크 ====================
+// 링버퍼 -> 프레임 추출 -> 파싱 -> FSM 디스패치
+// 메인 루프에서 매 사이클 호출. 한 번 호출에 완성된 프레임을 모두 소진한다.
+void Task_UartRxProcess(void)
+{
+ ae6:	1f 93       	push	r17
+ ae8:	cf 93       	push	r28
+ aea:	df 93       	push	r29
+ aec:	cd b7       	in	r28, 0x3d	; 61
+ aee:	de b7       	in	r29, 0x3e	; 62
+ af0:	ca 56       	subi	r28, 0x6A	; 106
+ af2:	d1 09       	sbc	r29, r1
+ af4:	0f b6       	in	r0, 0x3f	; 63
+ af6:	f8 94       	cli
+ af8:	de bf       	out	0x3e, r29	; 62
+ afa:	0f be       	out	0x3f, r0	; 63
+ afc:	cd bf       	out	0x3d, r28	; 61
+	static char frame[MAX_FRAME_LEN + 1];
+
+	while (Frame_TryExtract(frame, MAX_FRAME_LEN))
+ afe:	b0 c0       	rjmp	.+352    	; 0xc60 <Task_UartRxProcess+0x17a>
+	{
+		char fields[MAX_FIELDS][MAX_FIELD_LEN];
+		uint8_t n = Split_Fields(frame, fields, MAX_FIELDS);
+ b00:	46 e0       	ldi	r20, 0x06	; 6
+ b02:	be 01       	movw	r22, r28
+ b04:	6f 5f       	subi	r22, 0xFF	; 255
+ b06:	7f 4f       	sbci	r23, 0xFF	; 255
+ b08:	80 e2       	ldi	r24, 0x20	; 32
+ b0a:	92 e0       	ldi	r25, 0x02	; 2
+ b0c:	90 dc       	rcall	.-1760   	; 0x42e <Split_Fields>
+ b0e:	18 2f       	mov	r17, r24
+
+		if (n == 0)
+ b10:	88 23       	and	r24, r24
+ b12:	09 f4       	brne	.+2      	; 0xb16 <Task_UartRxProcess+0x30>
+ b14:	a5 c0       	rjmp	.+330    	; 0xc60 <Task_UartRxProcess+0x17a>
+		{
+			continue;   // 빈 프레임, 무시
+		}
+
+		CmdType_t cmd = Parse_CmdType(fields[0]);
+ b16:	ce 01       	movw	r24, r28
+ b18:	01 96       	adiw	r24, 0x01	; 1
+ b1a:	9b dd       	rcall	.-1226   	; 0x652 <Parse_CmdType>
+
+		switch (cmd)
+ b1c:	81 30       	cpi	r24, 0x01	; 1
+ b1e:	09 f4       	brne	.+2      	; 0xb22 <Task_UartRxProcess+0x3c>
+ b20:	3b c0       	rjmp	.+118    	; 0xb98 <Task_UartRxProcess+0xb2>
+ b22:	20 f0       	brcs	.+8      	; 0xb2c <Task_UartRxProcess+0x46>
+ b24:	82 30       	cpi	r24, 0x02	; 2
+ b26:	09 f4       	brne	.+2      	; 0xb2a <Task_UartRxProcess+0x44>
+ b28:	68 c0       	rjmp	.+208    	; 0xbfa <Task_UartRxProcess+0x114>
+ b2a:	77 c0       	rjmp	.+238    	; 0xc1a <Task_UartRxProcess+0x134>
+		{
+			case CMD_MOVE:
+			{
+				MoveCmd_t move;
+				uint8_t err = Parse_MOVE(frame, &move);
+ b2c:	be 01       	movw	r22, r28
+ b2e:	6f 59       	subi	r22, 0x9F	; 159
+ b30:	7f 4f       	sbci	r23, 0xFF	; 255
+ b32:	80 e2       	ldi	r24, 0x20	; 32
+ b34:	92 e0       	ldi	r25, 0x02	; 2
+ b36:	ab dd       	rcall	.-1194   	; 0x68e <Parse_MOVE>
+ b38:	18 2f       	mov	r17, r24
+				if (err == 0)
+ b3a:	81 11       	cpse	r24, r1
+ b3c:	05 c0       	rjmp	.+10     	; 0xb48 <Task_UartRxProcess+0x62>
+				{
+					FSM_HandleMove(&move);
+ b3e:	ce 01       	movw	r24, r28
+ b40:	8f 59       	subi	r24, 0x9F	; 159
+ b42:	9f 4f       	sbci	r25, 0xFF	; 255
+ b44:	34 db       	rcall	.-2456   	; 0x1ae <FSM_HandleMove>
+ b46:	8c c0       	rjmp	.+280    	; 0xc60 <Task_UartRxProcess+0x17a>
+				}
+				else
+				{
+					// req_id를 파싱하지 못했을 수 있으므로 필드에서 재시도
+					uint32_t req_id = 0;
+					if (strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+ b48:	de 01       	movw	r26, r28
+ b4a:	51 96       	adiw	r26, 0x11	; 17
+ b4c:	fd 01       	movw	r30, r26
+ b4e:	01 90       	ld	r0, Z+
+ b50:	00 20       	and	r0, r0
+ b52:	e9 f7       	brne	.-6      	; 0xb4e <Task_UartRxProcess+0x68>
+ b54:	31 97       	sbiw	r30, 0x01	; 1
+ b56:	ea 1b       	sub	r30, r26
+ b58:	fb 0b       	sbc	r31, r27
+ b5a:	38 97       	sbiw	r30, 0x08	; 8
+ b5c:	41 f4       	brne	.+16     	; 0xb6e <Task_UartRxProcess+0x88>
+ b5e:	cd 01       	movw	r24, r26
+ b60:	aa dc       	rcall	.-1708   	; 0x4b6 <IsAllHexDigits>
+ b62:	88 23       	and	r24, r24
+					{
+						req_id = HexToUint32(fields[1]);
+ b64:	41 f0       	breq	.+16     	; 0xb76 <Task_UartRxProcess+0x90>
+ b66:	ce 01       	movw	r24, r28
+ b68:	41 96       	adiw	r24, 0x11	; 17
+ b6a:	bb dc       	rcall	.-1674   	; 0x4e2 <HexToUint32>
+ b6c:	07 c0       	rjmp	.+14     	; 0xb7c <Task_UartRxProcess+0x96>
+					FSM_HandleMove(&move);
+				}
+				else
+				{
+					// req_id를 파싱하지 못했을 수 있으므로 필드에서 재시도
+					uint32_t req_id = 0;
+ b6e:	60 e0       	ldi	r22, 0x00	; 0
+ b70:	70 e0       	ldi	r23, 0x00	; 0
+ b72:	cb 01       	movw	r24, r22
+ b74:	03 c0       	rjmp	.+6      	; 0xb7c <Task_UartRxProcess+0x96>
+ b76:	60 e0       	ldi	r22, 0x00	; 0
+ b78:	70 e0       	ldi	r23, 0x00	; 0
+ b7a:	cb 01       	movw	r24, r22
+					if (strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+					{
+						req_id = HexToUint32(fields[1]);
+					}
+					const char *code = (err == 2) ? "INVALID_COORD"
+					: (err == 3) ? "INVALID_TIME"
+ b7c:	12 30       	cpi	r17, 0x02	; 2
+ b7e:	29 f0       	breq	.+10     	; 0xb8a <Task_UartRxProcess+0xa4>
+ b80:	13 30       	cpi	r17, 0x03	; 3
+ b82:	31 f4       	brne	.+12     	; 0xb90 <Task_UartRxProcess+0xaa>
+ b84:	41 e9       	ldi	r20, 0x91	; 145
+ b86:	51 e0       	ldi	r21, 0x01	; 1
+ b88:	05 c0       	rjmp	.+10     	; 0xb94 <Task_UartRxProcess+0xae>
+ b8a:	43 e8       	ldi	r20, 0x83	; 131
+ b8c:	51 e0       	ldi	r21, 0x01	; 1
+ b8e:	02 c0       	rjmp	.+4      	; 0xb94 <Task_UartRxProcess+0xae>
+ b90:	44 e7       	ldi	r20, 0x74	; 116
+					: "INVALID_FORMAT";
+					Send_ERROR(req_id, code);
+ b92:	51 e0       	ldi	r21, 0x01	; 1
+ b94:	7f df       	rcall	.-258    	; 0xa94 <Send_ERROR>
+			}
+
+			case CMD_DISPENSE:
+			{
+				DispenseCmd_t disp;
+				uint8_t err = Parse_DISPENSE(frame, &disp);
+ b96:	64 c0       	rjmp	.+200    	; 0xc60 <Task_UartRxProcess+0x17a>
+ b98:	be 01       	movw	r22, r28
+ b9a:	6f 59       	subi	r22, 0x9F	; 159
+ b9c:	7f 4f       	sbci	r23, 0xFF	; 255
+ b9e:	80 e2       	ldi	r24, 0x20	; 32
+ ba0:	92 e0       	ldi	r25, 0x02	; 2
+ ba2:	36 de       	rcall	.-916    	; 0x810 <Parse_DISPENSE>
+				if (err == 0)
+ ba4:	18 2f       	mov	r17, r24
+ ba6:	81 11       	cpse	r24, r1
+				{
+					FSM_HandleDispense(&disp);
+ ba8:	05 c0       	rjmp	.+10     	; 0xbb4 <Task_UartRxProcess+0xce>
+ baa:	ce 01       	movw	r24, r28
+ bac:	8f 59       	subi	r24, 0x9F	; 159
+ bae:	9f 4f       	sbci	r25, 0xFF	; 255
+ bb0:	10 db       	rcall	.-2528   	; 0x1d2 <FSM_HandleDispense>
+ bb2:	56 c0       	rjmp	.+172    	; 0xc60 <Task_UartRxProcess+0x17a>
+				}
+				else
+				{
+					uint32_t req_id = 0;
+					if (strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+ bb4:	de 01       	movw	r26, r28
+ bb6:	51 96       	adiw	r26, 0x11	; 17
+ bb8:	fd 01       	movw	r30, r26
+ bba:	01 90       	ld	r0, Z+
+ bbc:	00 20       	and	r0, r0
+ bbe:	e9 f7       	brne	.-6      	; 0xbba <Task_UartRxProcess+0xd4>
+ bc0:	31 97       	sbiw	r30, 0x01	; 1
+ bc2:	ea 1b       	sub	r30, r26
+ bc4:	fb 0b       	sbc	r31, r27
+ bc6:	38 97       	sbiw	r30, 0x08	; 8
+ bc8:	41 f4       	brne	.+16     	; 0xbda <Task_UartRxProcess+0xf4>
+ bca:	cd 01       	movw	r24, r26
+ bcc:	74 dc       	rcall	.-1816   	; 0x4b6 <IsAllHexDigits>
+ bce:	88 23       	and	r24, r24
+					{
+						req_id = HexToUint32(fields[1]);
+ bd0:	41 f0       	breq	.+16     	; 0xbe2 <Task_UartRxProcess+0xfc>
+ bd2:	ce 01       	movw	r24, r28
+ bd4:	41 96       	adiw	r24, 0x11	; 17
+ bd6:	85 dc       	rcall	.-1782   	; 0x4e2 <HexToUint32>
+ bd8:	07 c0       	rjmp	.+14     	; 0xbe8 <Task_UartRxProcess+0x102>
+				{
+					FSM_HandleDispense(&disp);
+				}
+				else
+				{
+					uint32_t req_id = 0;
+ bda:	60 e0       	ldi	r22, 0x00	; 0
+ bdc:	70 e0       	ldi	r23, 0x00	; 0
+ bde:	cb 01       	movw	r24, r22
+ be0:	03 c0       	rjmp	.+6      	; 0xbe8 <Task_UartRxProcess+0x102>
+ be2:	60 e0       	ldi	r22, 0x00	; 0
+ be4:	70 e0       	ldi	r23, 0x00	; 0
+					if (strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+					{
+						req_id = HexToUint32(fields[1]);
+					}
+					const char *code = (err == 2) ? "INVALID_COORD" : "INVALID_FORMAT";
+ be6:	cb 01       	movw	r24, r22
+ be8:	12 30       	cpi	r17, 0x02	; 2
+ bea:	19 f4       	brne	.+6      	; 0xbf2 <Task_UartRxProcess+0x10c>
+ bec:	43 e8       	ldi	r20, 0x83	; 131
+ bee:	51 e0       	ldi	r21, 0x01	; 1
+ bf0:	02 c0       	rjmp	.+4      	; 0xbf6 <Task_UartRxProcess+0x110>
+					Send_ERROR(req_id, code);
+ bf2:	44 e7       	ldi	r20, 0x74	; 116
+ bf4:	51 e0       	ldi	r21, 0x01	; 1
+ bf6:	4e df       	rcall	.-356    	; 0xa94 <Send_ERROR>
+			}
+
+			case CMD_ACK:
+			{
+				uint32_t req_id;
+				if (Parse_ACK_RESULT(frame, &req_id) == 0)
+ bf8:	33 c0       	rjmp	.+102    	; 0xc60 <Task_UartRxProcess+0x17a>
+ bfa:	be 01       	movw	r22, r28
+ bfc:	6f 59       	subi	r22, 0x9F	; 159
+ bfe:	7f 4f       	sbci	r23, 0xFF	; 255
+ c00:	80 e2       	ldi	r24, 0x20	; 32
+ c02:	92 e0       	ldi	r25, 0x02	; 2
+ c04:	7a de       	rcall	.-780    	; 0x8fa <Parse_ACK_RESULT>
+ c06:	81 11       	cpse	r24, r1
+				{
+					FSM_HandleResultAck(req_id);
+ c08:	2b c0       	rjmp	.+86     	; 0xc60 <Task_UartRxProcess+0x17a>
+ c0a:	a5 96       	adiw	r28, 0x25	; 37
+ c0c:	6c ad       	ldd	r22, Y+60	; 0x3c
+ c0e:	7d ad       	ldd	r23, Y+61	; 0x3d
+ c10:	8e ad       	ldd	r24, Y+62	; 0x3e
+ c12:	9f ad       	ldd	r25, Y+63	; 0x3f
+ c14:	a5 97       	sbiw	r28, 0x25	; 37
+ c16:	f4 da       	rcall	.-2584   	; 0x200 <FSM_HandleResultAck>
+ c18:	23 c0       	rjmp	.+70     	; 0xc60 <Task_UartRxProcess+0x17a>
+
+			default:
+			{
+				// 요청번호 자리를 최대한 회수 시도 (명세상 두 번째 필드가 보통 ID)
+				uint32_t req_id = 0;
+				if (n >= 2 && strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+ c1a:	12 30       	cpi	r17, 0x02	; 2
+ c1c:	98 f0       	brcs	.+38     	; 0xc44 <Task_UartRxProcess+0x15e>
+ c1e:	de 01       	movw	r26, r28
+ c20:	51 96       	adiw	r26, 0x11	; 17
+ c22:	fd 01       	movw	r30, r26
+ c24:	01 90       	ld	r0, Z+
+ c26:	00 20       	and	r0, r0
+ c28:	e9 f7       	brne	.-6      	; 0xc24 <Task_UartRxProcess+0x13e>
+ c2a:	31 97       	sbiw	r30, 0x01	; 1
+ c2c:	ea 1b       	sub	r30, r26
+ c2e:	fb 0b       	sbc	r31, r27
+ c30:	38 97       	sbiw	r30, 0x08	; 8
+ c32:	61 f4       	brne	.+24     	; 0xc4c <Task_UartRxProcess+0x166>
+ c34:	cd 01       	movw	r24, r26
+ c36:	3f dc       	rcall	.-1922   	; 0x4b6 <IsAllHexDigits>
+ c38:	88 23       	and	r24, r24
+				{
+					req_id = HexToUint32(fields[1]);
+ c3a:	61 f0       	breq	.+24     	; 0xc54 <Task_UartRxProcess+0x16e>
+ c3c:	ce 01       	movw	r24, r28
+ c3e:	41 96       	adiw	r24, 0x11	; 17
+ c40:	50 dc       	rcall	.-1888   	; 0x4e2 <HexToUint32>
+			}
+
+			default:
+			{
+				// 요청번호 자리를 최대한 회수 시도 (명세상 두 번째 필드가 보통 ID)
+				uint32_t req_id = 0;
+ c42:	0b c0       	rjmp	.+22     	; 0xc5a <Task_UartRxProcess+0x174>
+ c44:	60 e0       	ldi	r22, 0x00	; 0
+ c46:	70 e0       	ldi	r23, 0x00	; 0
+ c48:	cb 01       	movw	r24, r22
+ c4a:	07 c0       	rjmp	.+14     	; 0xc5a <Task_UartRxProcess+0x174>
+ c4c:	60 e0       	ldi	r22, 0x00	; 0
+ c4e:	70 e0       	ldi	r23, 0x00	; 0
+ c50:	cb 01       	movw	r24, r22
+ c52:	03 c0       	rjmp	.+6      	; 0xc5a <Task_UartRxProcess+0x174>
+				if (n >= 2 && strlen(fields[1]) == 8 && IsAllHexDigits(fields[1]))
+				{
+					req_id = HexToUint32(fields[1]);
+				}
+				Send_ERROR(req_id, "INVALID_FORMAT");
+ c54:	60 e0       	ldi	r22, 0x00	; 0
+ c56:	70 e0       	ldi	r23, 0x00	; 0
+ c58:	cb 01       	movw	r24, r22
+// 메인 루프에서 매 사이클 호출. 한 번 호출에 완성된 프레임을 모두 소진한다.
+void Task_UartRxProcess(void)
+{
+	static char frame[MAX_FRAME_LEN + 1];
+
+	while (Frame_TryExtract(frame, MAX_FRAME_LEN))
+ c5a:	44 e7       	ldi	r20, 0x74	; 116
+ c5c:	51 e0       	ldi	r21, 0x01	; 1
+ c5e:	1a df       	rcall	.-460    	; 0xa94 <Send_ERROR>
+ c60:	60 e4       	ldi	r22, 0x40	; 64
+ c62:	80 e2       	ldi	r24, 0x20	; 32
+ c64:	92 e0       	ldi	r25, 0x02	; 2
+ c66:	87 db       	rcall	.-2290   	; 0x376 <Frame_TryExtract>
+				break;
+			}
+		}
+	}
+
+	if (Frame_ConsumeOverflowFlag())
+ c68:	81 11       	cpse	r24, r1
+ c6a:	4a cf       	rjmp	.-364    	; 0xb00 <Task_UartRxProcess+0x1a>
+ c6c:	d8 db       	rcall	.-2128   	; 0x41e <Frame_ConsumeOverflowFlag>
+ c6e:	88 23       	and	r24, r24
+	{
+		// 64바이트를 초과한 프레임은 요청번호를 알 수 없으므로 0으로 보고
+		Send_ERROR(0, "INVALID_FORMAT");
+ c70:	31 f0       	breq	.+12     	; 0xc7e <Task_UartRxProcess+0x198>
+ c72:	44 e7       	ldi	r20, 0x74	; 116
+ c74:	51 e0       	ldi	r21, 0x01	; 1
+ c76:	60 e0       	ldi	r22, 0x00	; 0
+ c78:	70 e0       	ldi	r23, 0x00	; 0
+ c7a:	cb 01       	movw	r24, r22
+ c7c:	0b df       	rcall	.-490    	; 0xa94 <Send_ERROR>
+	}
+}
+ c7e:	c6 59       	subi	r28, 0x96	; 150
+ c80:	df 4f       	sbci	r29, 0xFF	; 255
+ c82:	0f b6       	in	r0, 0x3f	; 63
+ c84:	f8 94       	cli
+ c86:	de bf       	out	0x3e, r29	; 62
+ c88:	0f be       	out	0x3f, r0	; 63
+ c8a:	cd bf       	out	0x3d, r28	; 61
+ c8c:	df 91       	pop	r29
+ c8e:	cf 91       	pop	r28
+ c90:	1f 91       	pop	r17
+ c92:	08 95       	ret
+
+00000c94 <__udivmodsi4>:
+ c94:	a1 e2       	ldi	r26, 0x21	; 33
+ c96:	1a 2e       	mov	r1, r26
+ c98:	aa 1b       	sub	r26, r26
+ c9a:	bb 1b       	sub	r27, r27
+ c9c:	fd 01       	movw	r30, r26
+ c9e:	0d c0       	rjmp	.+26     	; 0xcba <__udivmodsi4_ep>
+
+00000ca0 <__udivmodsi4_loop>:
+ ca0:	aa 1f       	adc	r26, r26
+ ca2:	bb 1f       	adc	r27, r27
+ ca4:	ee 1f       	adc	r30, r30
+ ca6:	ff 1f       	adc	r31, r31
+ ca8:	a2 17       	cp	r26, r18
+ caa:	b3 07       	cpc	r27, r19
+ cac:	e4 07       	cpc	r30, r20
+ cae:	f5 07       	cpc	r31, r21
+ cb0:	20 f0       	brcs	.+8      	; 0xcba <__udivmodsi4_ep>
+ cb2:	a2 1b       	sub	r26, r18
+ cb4:	b3 0b       	sbc	r27, r19
+ cb6:	e4 0b       	sbc	r30, r20
+ cb8:	f5 0b       	sbc	r31, r21
+
+00000cba <__udivmodsi4_ep>:
+ cba:	66 1f       	adc	r22, r22
+ cbc:	77 1f       	adc	r23, r23
+ cbe:	88 1f       	adc	r24, r24
+ cc0:	99 1f       	adc	r25, r25
+ cc2:	1a 94       	dec	r1
+ cc4:	69 f7       	brne	.-38     	; 0xca0 <__udivmodsi4_loop>
+ cc6:	60 95       	com	r22
+ cc8:	70 95       	com	r23
+ cca:	80 95       	com	r24
+ ccc:	90 95       	com	r25
+ cce:	9b 01       	movw	r18, r22
+ cd0:	ac 01       	movw	r20, r24
+ cd2:	bd 01       	movw	r22, r26
+ cd4:	cf 01       	movw	r24, r30
+ cd6:	08 95       	ret
+
+00000cd8 <memcpy>:
+ cd8:	fb 01       	movw	r30, r22
+ cda:	dc 01       	movw	r26, r24
+ cdc:	02 c0       	rjmp	.+4      	; 0xce2 <memcpy+0xa>
+ cde:	01 90       	ld	r0, Z+
+ ce0:	0d 92       	st	X+, r0
+ ce2:	41 50       	subi	r20, 0x01	; 1
+ ce4:	50 40       	sbci	r21, 0x00	; 0
+ ce6:	d8 f7       	brcc	.-10     	; 0xcde <memcpy+0x6>
+ ce8:	08 95       	ret
+
+00000cea <strcmp>:
+ cea:	fb 01       	movw	r30, r22
+ cec:	dc 01       	movw	r26, r24
+ cee:	8d 91       	ld	r24, X+
+ cf0:	01 90       	ld	r0, Z+
+ cf2:	80 19       	sub	r24, r0
+ cf4:	01 10       	cpse	r0, r1
+ cf6:	d9 f3       	breq	.-10     	; 0xcee <strcmp+0x4>
+ cf8:	99 0b       	sbc	r25, r25
+ cfa:	08 95       	ret
+
+00000cfc <eeprom_read_block>:
+ cfc:	dc 01       	movw	r26, r24
+ cfe:	cb 01       	movw	r24, r22
+
+00000d00 <eeprom_read_blraw>:
+ d00:	fc 01       	movw	r30, r24
+ d02:	e1 99       	sbic	0x1c, 1	; 28
+ d04:	fe cf       	rjmp	.-4      	; 0xd02 <eeprom_read_blraw+0x2>
+ d06:	06 c0       	rjmp	.+12     	; 0xd14 <eeprom_read_blraw+0x14>
+ d08:	ff bb       	out	0x1f, r31	; 31
+ d0a:	ee bb       	out	0x1e, r30	; 30
+ d0c:	e0 9a       	sbi	0x1c, 0	; 28
+ d0e:	31 96       	adiw	r30, 0x01	; 1
+ d10:	0d b2       	in	r0, 0x1d	; 29
+ d12:	0d 92       	st	X+, r0
+ d14:	41 50       	subi	r20, 0x01	; 1
+ d16:	50 40       	sbci	r21, 0x00	; 0
+ d18:	b8 f7       	brcc	.-18     	; 0xd08 <eeprom_read_blraw+0x8>
+ d1a:	08 95       	ret
+
+00000d1c <_exit>:
+ d1c:	f8 94       	cli
+
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
 00000d1e <__stop_program>:
  d1e:	ff cf       	rjmp	.-2      	; 0xd1e <__stop_program>

@@ -634,6 +634,7 @@ END GROUP
 .debug_pubnames
  *(.debug_pubnames)
 
+<<<<<<< HEAD
 .debug_info     0x00000000     0x2351
  *(.debug_info .gnu.linkonce.wi.*)
  .debug_info    0x00000000      0x780 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51/crtatmega128a.o
@@ -643,6 +644,17 @@ END GROUP
  .debug_info    0x00001071      0x245 uart_driver.o
  .debug_info    0x000012b6      0xfff uart_protocol.o
  .debug_info    0x000022b5       0x9c C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51\libatmega128a.a(eerd_block.o)
+=======
+.debug_info     0x00000000     0x234f
+ *(.debug_info .gnu.linkonce.wi.*)
+ .debug_info    0x00000000      0x780 C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51/crtatmega128a.o
+ .debug_info    0x00000780      0x422 eeprom_state.o
+ .debug_info    0x00000ba2      0x219 fsm.o
+ .debug_info    0x00000dbb      0x2b4 main.o
+ .debug_info    0x0000106f      0x245 uart_driver.o
+ .debug_info    0x000012b4      0xfff uart_protocol.o
+ .debug_info    0x000022b3       0x9c C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51\libatmega128a.a(eerd_block.o)
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
 
 .debug_abbrev   0x00000000      0xe48
  *(.debug_abbrev)
@@ -677,6 +689,7 @@ END GROUP
  .debug_str     0x00000000      0x27d C:/Program Files (x86)/Atmel/Studio/7.0/Packs/atmel/ATmega_DFP/1.7.374/gcc/dev/atmega128a/avr51/crtatmega128a.o
  .debug_str     0x0000027d      0x3b6 eeprom_state.o
                                 0x3ea (size before relaxing)
+<<<<<<< HEAD
  .debug_str     0x00000633       0xb7 fsm.o
                                 0x1ea (size before relaxing)
  .debug_str     0x000006ea       0x70 main.o
@@ -684,6 +697,15 @@ END GROUP
  .debug_str     0x0000075a       0x96 uart_driver.o
                                 0x226 (size before relaxing)
  .debug_str     0x000007f0      0x1d1 uart_protocol.o
+=======
+ .debug_str     0x00000633       0x84 fsm.o
+                                0x200 (size before relaxing)
+ .debug_str     0x000006b7       0x70 main.o
+                                0x306 (size before relaxing)
+ .debug_str     0x00000727       0x96 uart_driver.o
+                                0x226 (size before relaxing)
+ .debug_str     0x000007bd      0x1d1 uart_protocol.o
+>>>>>>> e7f2e8cc9a4177eca6de88621bacacad3044b08f
                                 0x432 (size before relaxing)
 
 .debug_loc      0x00000000     0x134f
