@@ -3,21 +3,28 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
-// ---------------- 센서 핀 정의 (PD2 = INT2) ----------------
-#define SENSOR_DDR   DDRD
-#define SENSOR_PORT  PORTD
-#define SENSOR_PIN   PIND
-#define SENSOR_BIT   PD2
+// ---------------- 센서 핀 정의 (IR1 = PD2/INT2, IR2 = PE4/INT4) ----------------
+// PD3(INT3)는 하드웨어 결함(핀 고착 LOW)으로 사용 불가 -> PE4(INT4)로 이전
+#define SENSOR1_DDR   DDRD
+#define SENSOR1_PORT  PORTD
+#define SENSOR1_PIN   PIND
+#define SENSOR1_BIT   PD2
+
+#define SENSOR2_DDR   DDRE
+#define SENSOR2_PORT  PORTE
+#define SENSOR2_PIN   PINE
+#define SENSOR2_BIT   PE4
 
 #define DEBOUNCE_MS  5      // 디바운스 시간 (ms)
 
 // ---------------- 전역 변수 ----------------
-volatile uint8_t  g_sensor_event = 0;   // ISR에서 세우는 이벤트 플래그
+volatile uint8_t  g_sensor_event = 0;   // ISR(IR1 또는 IR2)에서 세우는 이벤트 플래그
 volatile uint16_t g_tick_ms      = 0;   // 1ms마다 증가하는 tick 카운터
 volatile uint16_t g_last_event_tick = 0;
-volatile uint16_t g_pill_count   = 0;   // 감지 카운트
+volatile uint16_t g_pill_count   = 0;   // 감지 카운트 (IR1, IR2 중 하나라도 감지되면 증가)
 
-uint8_t last_state;
+uint8_t last_state1;   // IR1 최근 상태
+uint8_t last_state2;   // IR2 최근 상태
 
 // ---------------- UART 함수 ----------------
 void UART0_Init(unsigned long baud)
@@ -80,27 +87,47 @@ ISR(TIMER2_COMP_vect)
 	g_tick_ms++;
 }
 
-// ---------------- 센서 초기화 & 외부 인터럽트(INT2) 설정 ----------------
+// ---------------- 센서 초기화 & 외부 인터럽트(INT2, INT4) 설정 ----------------
 void Sensor_Init(void)
 {
-	SENSOR_DDR  &= ~(1 << SENSOR_BIT);
-	SENSOR_PORT |=  (1 << SENSOR_BIT);
+	// IR1 (PD2 / INT2)
+	SENSOR1_DDR  &= ~(1 << SENSOR1_BIT);
+	SENSOR1_PORT |=  (1 << SENSOR1_BIT);
 
-	// INT2: any logical change (ISC21:ISC20 = 01)
+	// IR2 (PE4 / INT4)
+	SENSOR2_DDR  &= ~(1 << SENSOR2_BIT);
+	SENSOR2_PORT |=  (1 << SENSOR2_BIT);
+
+	// INT2: any logical change (ISC21:ISC20 = 01) - EICRA
 	EICRA &= ~((1 << ISC21) | (1 << ISC20));
 	EICRA |=  (1 << ISC20);
 
-	EIMSK |= (1 << INT2);
+	// INT4: any logical change (ISC41:ISC40 = 01) - EICRB
+	EICRB &= ~((1 << ISC41) | (1 << ISC40));
+	EICRB |=  (1 << ISC40);
+
+	EIMSK |= (1 << INT2) | (1 << INT4);
 }
 
 // 1: 빔 연결(정상), 0: 빔 차단(물체 감지)
-uint8_t Sensor_Read(void)
+uint8_t Sensor1_Read(void)
 {
-	return (SENSOR_PIN & (1 << SENSOR_BIT)) ? 1 : 0;
+	return (SENSOR1_PIN & (1 << SENSOR1_BIT)) ? 1 : 0;
+}
+
+uint8_t Sensor2_Read(void)
+{
+	return (SENSOR2_PIN & (1 << SENSOR2_BIT)) ? 1 : 0;
 }
 
 // ISR은 가볍게 - 플래그만 세움
 ISR(INT2_vect)
+{
+	g_sensor_event = 1;
+	g_last_event_tick = g_tick_ms;
+}
+
+ISR(INT4_vect)
 {
 	g_sensor_event = 1;
 	g_last_event_tick = g_tick_ms;
@@ -117,15 +144,29 @@ uint16_t get_tick_safe(void)
 
 int main(void)
 {
+	// MCU가 왜 (재)부팅됐는지 확인용 - 다른 초기화보다 먼저 읽고 지워야 함
+	uint8_t reset_cause = MCUCSR;
+	MCUCSR = 0;
+
 	UART0_Init(9600);
 	Timer2_Init();
 	Sensor_Init();
 	sei();
 
-	UART0_TxString("SEN0503 IR Break Beam INT2 Test Start\r\n");
+	UART0_TxString("SEN0503 IR Break Beam INT2(PD2)/INT4(PE4) Dual Sensor Test Start\r\n");
 
-	last_state = Sensor_Read();
-	UART0_TxString(last_state ? "Init: BEAM CLEAR\r\n" : "Init: BEAM BROKEN\r\n");
+	UART0_TxString("Reset Cause: ");
+	if (reset_cause & (1 << PORF))  UART0_TxString("POWER-ON ");
+	if (reset_cause & (1 << EXTRF)) UART0_TxString("EXTERNAL ");
+	if (reset_cause & (1 << BORF))  UART0_TxString("BROWN-OUT ");
+	if (reset_cause & (1 << WDRF))  UART0_TxString("WATCHDOG ");
+	if (reset_cause & (1 << JTRF))  UART0_TxString("JTAG ");
+	UART0_TxString("\r\n");
+
+	last_state1 = Sensor1_Read();
+	last_state2 = Sensor2_Read();
+	UART0_TxString(last_state1 ? "Init IR1: BEAM CLEAR\r\n" : "Init IR1: BEAM BROKEN\r\n");
+	UART0_TxString(last_state2 ? "Init IR2: BEAM CLEAR\r\n" : "Init IR2: BEAM BROKEN\r\n");
 
 	while (1)
 	{
@@ -138,23 +179,58 @@ int main(void)
 				g_sensor_event = 0;
 				sei();
 
-				uint8_t state = Sensor_Read();
-				if (state != last_state)
+				uint8_t state1 = Sensor1_Read();
+				uint8_t state2 = Sensor2_Read();
+
+				// 각 센서는 반드시 "자기 자신의 이전 상태"와만 비교한다.
+				// (한쪽을 합쳐진 공통 latch로 판정하면, 한쪽 센서가 정렬 불량 등으로
+				//  BROKEN 상태에 고착될 때 다른 센서의 새 감지까지 영원히 막혀버린다.)
+				uint8_t edge1_detected = (state1 == 0) && (last_state1 == 1); // IR1: CLEAR->BROKEN
+				uint8_t edge2_detected = (state2 == 0) && (last_state2 == 1); // IR2: CLEAR->BROKEN
+				uint8_t edge1_cleared  = (state1 == 1) && (last_state1 == 0); // IR1: BROKEN->CLEAR
+				uint8_t edge2_cleared  = (state2 == 1) && (last_state2 == 0); // IR2: BROKEN->CLEAR
+
+				last_state1 = state1;
+				last_state2 = state2;
+
+				if (edge1_detected || edge2_detected)
 				{
-					last_state = state;
+					g_pill_count++;   // 둘 중 하나만 감지되어도 카운트 증가 (동시 감지 시 1회만 증가)
 
-					if (state == 0)
+					UART0_TxString("Object Detected! (BEAM BROKEN) [");
+					if (edge1_detected && edge2_detected)
 					{
-						g_pill_count++;   // 감지될 때마다 카운트 증가
-
-						UART0_TxString("Object Detected! (BEAM BROKEN) Count=");
-						UART0_TxUint16(g_pill_count);
-						UART0_TxString("\r\n");
+						UART0_TxString("IR1+IR2");
+					}
+					else if (edge1_detected)
+					{
+						UART0_TxString("IR1");
 					}
 					else
 					{
-						UART0_TxString("Beam Clear\r\n");
+						UART0_TxString("IR2");
 					}
+					UART0_TxString("] Count=");
+					UART0_TxUint16(g_pill_count);
+					UART0_TxString("\r\n");
+				}
+
+				if (edge1_cleared || edge2_cleared)
+				{
+					UART0_TxString("Beam Clear [");
+					if (edge1_cleared && edge2_cleared)
+					{
+						UART0_TxString("IR1+IR2");
+					}
+					else if (edge1_cleared)
+					{
+						UART0_TxString("IR1");
+					}
+					else
+					{
+						UART0_TxString("IR2");
+					}
+					UART0_TxString("]\r\n");
 				}
 			}
 		}
