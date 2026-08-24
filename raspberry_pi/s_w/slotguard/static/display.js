@@ -20,6 +20,8 @@
         "DISPENSED",
         "FAILED",
         "MANUALLY_COMPLETED",
+        "BLISTER_EMPTY",
+        "EMPTY_BLISTER_CONFIRM",
         "MISSED",
         "COMM_ERROR",
         "DEVICE_ERROR"
@@ -178,10 +180,14 @@
         let html = "";
 
         if (status.screen === "MOVING") {
+            const emptySlotMove = schedule
+                && schedule.error_code === "EMPTY_BLISTER_SLOT";
             html = `
                 <section class="lcd-workflow">
                     <div class="lcd-spinner" aria-hidden="true"></div>
-                    <h1 class="lcd-title">약 위치로 이동 중입니다</h1>
+                    <h1 class="lcd-title">${emptySlotMove
+                        ? "현재 칸이 비어 있습니다.<br>다음 칸의 약으로 이동 중입니다."
+                        : "약 위치로 이동 중입니다"}</h1>
                     ${common}
                     <p>기구부에 손을 넣지 마세요 · ${remaining}</p>
                 </section>`;
@@ -225,6 +231,24 @@
                     <h1 class="lcd-title">수동 복약 완료를 기록했습니다</h1>
                     ${common}
                     <p>잠시 후 홈 화면으로 돌아갑니다</p>
+                </section>`;
+        } else if (status.screen === "EMPTY_BLISTER_CONFIRM") {
+            html = `
+                <section class="lcd-empty-choice">
+                    <div class="lcd-empty-choice-info">
+                        <h1>새 블리스터가 초기화되었습니다</h1>
+                        <p>약을 직접 복용했는지 선택해 주세요</p>
+                    </div>
+                    <div class="lcd-empty-choice-actions">
+                        <button id="empty-manual-taken" type="button"
+                                class="lcd-primary lcd-empty-choice-button">
+                            수동복약
+                        </button>
+                        <button id="empty-manual-not-taken" type="button"
+                                class="lcd-secondary lcd-empty-choice-button">
+                            수동미복약
+                        </button>
+                    </div>
                 </section>`;
         } else if (status.screen === "FAILED") {
             html = `
@@ -416,6 +440,34 @@
                 await refreshStatus();
             });
         }
+        const emptyManualTaken = document.getElementById(
+            "empty-manual-taken"
+        );
+        const emptyManualNotTaken = document.getElementById(
+            "empty-manual-not-taken"
+        );
+        if (emptyManualTaken) {
+            emptyManualTaken.addEventListener("click", async () => {
+                emptyManualTaken.disabled = true;
+                emptyManualNotTaken.disabled = true;
+                await postJson("/api/display/empty-blister-choice", {
+                    schedule_id: schedule.id,
+                    choice: "manual_taken"
+                });
+                await refreshStatus();
+            });
+        }
+        if (emptyManualNotTaken) {
+            emptyManualNotTaken.addEventListener("click", async () => {
+                emptyManualTaken.disabled = true;
+                emptyManualNotTaken.disabled = true;
+                await postJson("/api/display/empty-blister-choice", {
+                    schedule_id: schedule.id,
+                    choice: "manual_not_taken"
+                });
+                await refreshStatus();
+            });
+        }
     }
 
     function render(status) {
@@ -433,14 +485,14 @@
             button.classList.toggle("is-active", !locked && button.dataset.view === localView);
         });
 
-        if (locked) {
+        if (status.screen === "BLISTER_EMPTY") {
+            renderBlisterEmpty(status);
+        } else if (locked) {
             renderWorkflow(status);
         } else if (localView === "device") {
             renderDevice(status);
         } else if (localView === "settings") {
             renderSettings(status);
-        } else if (status.screen === "BLISTER_EMPTY") {
-            renderBlisterEmpty(status);
         } else if (status.screen === "TIME_REQUIRED") {
             renderWorkflow(status);
         } else {

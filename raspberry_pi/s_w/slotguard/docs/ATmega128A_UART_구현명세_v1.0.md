@@ -1,7 +1,7 @@
 # 약SLOT-GUARD ATmega128A UART 구현명세
 
-문서 버전: v1.0  
-작성 기준일: 2026-08-13  
+문서 버전: v1.1  
+작성 기준일: 2026-08-24  
 대상: ATmega128A 펌웨어 개발팀  
 연동 상대: Raspberry Pi 4 / SLOT-GUARD Flask·UART 서비스
 
@@ -50,7 +50,7 @@ MOVE|RRRRRRRR|X|Y|TTTTTT\n
 | RRRRRRRR | MOVE 요청번호 | 8자리 HEX |
 | X | 행 좌표 | 0~1 |
 | Y | 열 좌표 | 0~4 |
-| TTTTTT | 예약 기준 복약 허용시간(초) | 000001~999999 |
+| TTTTTT | Pi가 계산한 현재 복약 허용시간(초) | 000001~999999 |
 
 정상 순서:
 
@@ -62,6 +62,8 @@ AT → Pi: WAIT|00000001
 ```
 
 ACK는 명령 형식과 수행 가능 여부를 확인하고 중복 방지 상태를 저장한 뒤, 스테핑모터를 움직이기 직전에 전송한다. WAIT는 목표 위치 도착과 서보 배출 가능 상태를 의미한다.
+
+최초 MOVE에는 예약에 설정된 허용시간을 사용한다. 빈 슬롯 결과 `XY2` 후 같은 복약을 다음 슬롯에서 계속할 때와 새 블리스터 교체 후 다시 시작할 때는 Pi가 예약 마감까지 남은 시간을 `TTTTTT`로 보낸다. 새 MOVE는 새 요청번호를 사용하며, 같은 요청번호의 재전송에서는 최초 수신한 전체 페이로드가 유지된다.
 
 ### 4.2 DISPENSE
 
@@ -94,6 +96,7 @@ RESULT|RRRRRRRR|XYR\n
 | Y | 실제 처리 열 0~4 |
 | R=1 | 서보 동작 후 배출구 통과 센서 감지 |
 | R=0 | 서보 동작했으나 센서 감지 없음 |
+| R=2 | 압출기는 정상 동작했으나 해당 블리스터 슬롯이 비어 있음 |
 
 예시:
 
@@ -101,8 +104,12 @@ RESULT|RRRRRRRR|XYR\n
 - `RESULT|0000000A|000`: 0행 0열 실패
 - `RESULT|00000014|141`: 1행 4열 성공
 - `RESULT|00000015|140`: 1행 4열 실패
+- `RESULT|00000016|102`: 1행 0열 빈 슬롯
+- `RESULT|00000017|142`: 1행 4열 빈 슬롯
 
 ATmega는 RESULT를 보낸 후 Pi의 `ACK|요청번호|RESULT`를 기다린다. ACK가 유실되면 RESULT를 재전송할 수 있으며, Pi는 같은 결과를 중복 저장하거나 슬롯을 두 번 이동하지 않는다.
+
+`R=2`의 RESULT ACK 후 Pi는 같은 복약 일정의 다음 좌표로 새 MOVE를 보낼 수 있다. ATmega는 RESULT ACK로 이전 DISPENSE를 종료한 뒤 이 새 요청번호의 MOVE를 정상적인 신규 명령으로 받아야 한다.
 
 ### 4.4 ERROR
 
@@ -136,7 +143,7 @@ IDLE
       └─ 새 DISPENSE → DISPENSE_ACCEPTED → DISPENSING → RESULT_READY
            └─ RESULT ACK → RESULT_ACKED
 
-새 블리스터 및 다음 예약의 새 MOVE → MOVE_ACCEPTED
+빈 슬롯의 다음 좌표, 새 블리스터 및 다음 예약의 새 MOVE → MOVE_ACCEPTED
 ```
 
 | 상태 | 허용 입력 | 동작 |
@@ -149,6 +156,7 @@ IDLE
 | DISPENSING | 같은 DISPENSE | 서보 재시작 금지, ACK만 재전송 |
 | RESULT_READY | 같은 DISPENSE | 저장된 RESULT 재전송 |
 | RESULT_READY | RESULT ACK | 완료 표시, 결과 캐시는 유지 |
+| RESULT_ACKED | 새 요청번호 MOVE | EEPROM 저장, 새 좌표 이동 시작 |
 | 모든 상태 | 같은 ID+다른 데이터 | ID_CONFLICT, 동작 금지 |
 
 ## 6. 중복 방지 저장 규칙
@@ -232,8 +240,9 @@ ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판
 3. DISPENSE 좌표가 READY 좌표와 다르면 동작하지 않는다.
 4. 서보 동작 중 다른 DISPENSE 요청은 BUSY 처리한다.
 5. R=0은 센서 미감지이며 ATmega가 자동으로 서보를 다시 작동하지 않는다.
-6. RECOVERY_REQUIRED에서도 자동 재구동하지 않는다.
-7. 요청번호·상태·결과가 EEPROM CRC 검증에 실패하면 모터를 금지한다.
+6. R=2는 빈 슬롯 결과이며 ATmega가 다음 슬롯 MOVE나 DISPENSE를 자체 생성하지 않는다.
+7. RECOVERY_REQUIRED에서도 자동 재구동하지 않는다.
+8. 요청번호·상태·결과가 EEPROM CRC 검증에 실패하면 모터를 금지한다.
 
 ## 10. 통합시험 수용 기준
 
@@ -253,6 +262,8 @@ ATmega는 Pi의 벽시계를 신뢰할 필요가 없다. 허용시간 종료 판
 | AT-12 | 센서 미감지 | 정확한 XY0 반환, 자동 재시도 없음 |
 | AT-13 | 장시간 UART 입력 | 버퍼 오버런·프레임 혼합 없음 |
 | AT-14 | 전원 재인가 | EEPROM 상태·CRC 정상 복구 |
+| AT-15 | 빈 블리스터 슬롯 | 정확한 XY2 반환, RESULT ACK 후 새 MOVE 수용 |
+| AT-16 | 연속 빈 슬롯 | 각 DISPENSE에 XY2 반환, 각 새 MOVE·DISPENSE는 1회만 구동 |
 
 ## 11. 완전 예시
 
@@ -269,6 +280,23 @@ AT < ACK|00000002|DISPENSE
 # 센서가 배출구 통과를 감지
 AT < RESULT|00000002|001
 Pi > ACK|00000002|RESULT
+```
+
+빈 슬롯 후 다음 슬롯으로 이동하는 경우:
+
+```text
+# 좌표 00이 비어 있고 예약 마감까지 3,540초 남음
+AT < RESULT|00000002|002
+Pi > ACK|00000002|RESULT
+Pi > MOVE|00000003|0|1|003540
+AT < ACK|00000003|MOVE
+AT < WAIT|00000003
+
+# 사용자가 LCD의 약 배출 버튼을 다시 터치
+Pi > DISPENSE|00000004|0|1
+AT < ACK|00000004|DISPENSE
+AT < RESULT|00000004|011
+Pi > ACK|00000004|RESULT
 ```
 
 ACK 프레임이 유실됐을 때:

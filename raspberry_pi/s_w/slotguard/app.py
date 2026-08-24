@@ -29,6 +29,7 @@ from database import (
     MAX_ALLOWED_SECONDS,
     MAX_MEDICINE_NAME_LENGTH,
     acknowledge_result,
+    complete_empty_blister_manual,
     complete_manual,
     create_schedule,
     delete_schedule,
@@ -66,7 +67,7 @@ POWER_HELPER_PATH = Path(
     )
 )
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
-APP_VERSION = "0.2.7"
+APP_VERSION = "0.3.0"
 
 
 def load_auth_config():
@@ -770,6 +771,14 @@ def seconds_until_deadline(schedule, now):
 
 
 def display_screen_state(now, active, blocking_result, latest_result, state):
+    if (
+        blocking_result is not None
+        and blocking_result["error_code"] == "EMPTY_BLISTER_SLOT"
+    ):
+        if state["blister_exhausted"]:
+            return "BLISTER_EMPTY", blocking_result
+        return "EMPTY_BLISTER_CONFIRM", blocking_result
+
     if blocking_result is not None:
         return blocking_result["status"], blocking_result
 
@@ -924,6 +933,45 @@ def api_display_manual_complete():
         play_blister_empty_voice()
     voice_alert_manager.stop()
     return jsonify({"ok": True, "blister_exhausted": result["blister_exhausted"]})
+
+
+@app.post("/api/display/empty-blister-choice")
+@display_local_only
+def api_display_empty_blister_choice():
+    data = request.get_json(silent=True) or {}
+    try:
+        schedule_id = int(data.get("schedule_id"))
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "INVALID_SCHEDULE",
+            "message": "올바른 복약 기록이 아닙니다.",
+        }), 400
+
+    choice = data.get("choice")
+    event_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        if choice == "manual_taken":
+            result = complete_empty_blister_manual(schedule_id, event_time)
+            if result is None:
+                raise ActiveDoseError("수동 복약을 기록할 수 없습니다.")
+            schedule = get_schedule(schedule_id)
+        elif choice == "manual_not_taken":
+            schedule = uart_service.resume_empty_blister_dose(schedule_id)
+        else:
+            return jsonify({
+                "error": "INVALID_CHOICE",
+                "message": (
+                    "수동복약 또는 수동미복약을 선택해 주세요."
+                ),
+            }), 400
+    except ActiveDoseError as error:
+        return jsonify({
+            "error": "EMPTY_BLISTER_CHOICE_NOT_ALLOWED",
+            "message": str(error),
+        }), 409
+
+    voice_alert_manager.stop()
+    return jsonify({"ok": True, "schedule": serialize_schedule(schedule)})
 
 
 @app.post("/api/display/acknowledge")

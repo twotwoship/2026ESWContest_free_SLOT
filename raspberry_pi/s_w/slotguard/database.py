@@ -61,6 +61,7 @@ SCHEDULE_SELECT = """
         x_coordinate,
         y_coordinate,
         move_request_id,
+        move_allowed_seconds,
         move_sent_at,
         move_ack_at,
         ready_at,
@@ -114,6 +115,8 @@ def _create_schedules_table(conn):
             x_coordinate          INTEGER CHECK(x_coordinate BETWEEN 0 AND 1),
             y_coordinate          INTEGER CHECK(y_coordinate BETWEEN 0 AND 4),
             move_request_id       TEXT,
+            move_allowed_seconds  INTEGER
+                                  CHECK(move_allowed_seconds BETWEEN 1 AND 999999),
             move_sent_at          TEXT,
             move_ack_at           TEXT,
             ready_at              TEXT,
@@ -133,6 +136,23 @@ def _create_schedules_table(conn):
             )
         )
         """
+    )
+
+
+def _ensure_schedule_retry_columns(conn):
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(schedules)").fetchall()
+    }
+    if "move_allowed_seconds" not in columns:
+        conn.execute(
+            "ALTER TABLE schedules "
+            "ADD COLUMN move_allowed_seconds INTEGER "
+            "CHECK(move_allowed_seconds BETWEEN 1 AND 999999)"
+        )
+    conn.execute(
+        "UPDATE schedules SET move_allowed_seconds = allowed_seconds "
+        "WHERE move_request_id IS NOT NULL AND move_allowed_seconds IS NULL"
     )
 
 
@@ -420,6 +440,8 @@ def init_db():
         else:
             _create_schedules_table(conn)
 
+        _ensure_schedule_retry_columns(conn)
+
         _ensure_device_state(conn)
 
         _ensure_device_settings(conn)
@@ -483,7 +505,7 @@ def init_db():
             ON event_log(created_at, id)
             """
         )
-        conn.execute("PRAGMA user_version = 4")
+        conn.execute("PRAGMA user_version = 5")
         conn.commit()
 
     except Exception:
@@ -580,6 +602,29 @@ def get_schedule_by_dispense_request(request_id):
             (request_id,),
         ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def is_result_request_processed(request_id):
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM event_log
+            WHERE request_id = ?
+              AND event_type IN (
+                  'EMPTY_BLISTER_SLOT',
+                  'DISPENSED',
+                  'FAILED',
+                  'MANUALLY_COMPLETED'
+              )
+            LIMIT 1
+            """,
+            (request_id,),
+        ).fetchone()
+        return row is not None
     finally:
         conn.close()
 
@@ -751,7 +796,11 @@ def prepare_move(schedule_id, event_time):
         conn.execute(
             """
             UPDATE schedules
-            SET status = 'MOVING', move_request_id = ?
+            SET status = 'MOVING', move_request_id = ?,
+                move_allowed_seconds = COALESCE(
+                    move_allowed_seconds,
+                    allowed_seconds
+                )
             WHERE id = ?
             """,
             (request_id, schedule_id),
@@ -890,7 +939,258 @@ def complete_manual(schedule_id, event_time):
         "MANUALLY_COMPLETED",
         event_time,
         required_current_status="FAILED",
+        excluded_error_code="EMPTY_BLISTER_SLOT",
     )
+
+
+def continue_after_empty_slot(
+    schedule_id,
+    request_id,
+    event_time,
+    remaining_seconds,
+):
+    if remaining_seconds < 1 or remaining_seconds > MAX_ALLOWED_SECONDS:
+        raise ValueError(
+            "remaining_seconds must be between "
+            f"1 and {MAX_ALLOWED_SECONDS}"
+        )
+
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE id = ? AND status = 'DISPENSING' "
+            "AND dispense_request_id = ?",
+            (schedule_id, request_id),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return None
+
+        coordinate_result = _advance_coordinate_in_transaction(conn, event_time)
+        coordinate_detail = f"{row['x_coordinate']}{row['y_coordinate']}"
+        _insert_event(
+            conn,
+            schedule_id,
+            "EMPTY_BLISTER_SLOT",
+            event_time,
+            request_id=request_id,
+            detail=coordinate_detail,
+        )
+
+        if coordinate_result["blister_exhausted"]:
+            conn.execute(
+                """
+                UPDATE schedules
+                SET status = 'FAILED',
+                    result_at = COALESCE(result_at, ?),
+                    completed_at = ?,
+                    error_code = 'EMPTY_BLISTER_SLOT',
+                    acknowledged_at = NULL
+                WHERE id = ?
+                """,
+                (event_time, event_time, schedule_id),
+            )
+            _insert_event(
+                conn,
+                schedule_id,
+                "FAILED",
+                event_time,
+                request_id=request_id,
+                detail="EMPTY_BLISTER_SLOT",
+            )
+        else:
+            move_request_id = allocate_request_id(conn)
+            next_x, next_y = coordinate_result["current"]
+            conn.execute(
+                """
+                UPDATE schedules
+                SET status = 'MOVING',
+                    x_coordinate = ?,
+                    y_coordinate = ?,
+                    move_request_id = ?,
+                    move_allowed_seconds = ?,
+                    move_sent_at = NULL,
+                    move_ack_at = NULL,
+                    ready_at = NULL,
+                    dispense_request_id = NULL,
+                    dispense_sent_at = NULL,
+                    dispense_ack_at = NULL,
+                    result_at = NULL,
+                    completed_at = NULL,
+                    error_code = 'EMPTY_BLISTER_SLOT',
+                    acknowledged_at = NULL
+                WHERE id = ?
+                """,
+                (
+                    next_x,
+                    next_y,
+                    move_request_id,
+                    remaining_seconds,
+                    schedule_id,
+                ),
+            )
+            _insert_event(
+                conn,
+                schedule_id,
+                "MOVE_PREPARED",
+                event_time,
+                request_id=move_request_id,
+                detail="EMPTY_BLISTER_SLOT",
+            )
+
+        conn.commit()
+        result = dict(coordinate_result)
+        result["schedule"] = get_schedule(schedule_id)
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def resume_after_empty_blister(
+    schedule_id,
+    event_time,
+    remaining_seconds,
+):
+    if remaining_seconds < 1 or remaining_seconds > MAX_ALLOWED_SECONDS:
+        raise ValueError(
+            "remaining_seconds must be between "
+            f"1 and {MAX_ALLOWED_SECONDS}"
+        )
+
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT current_x, current_y, blister_exhausted
+            FROM device_state WHERE singleton = 1
+            """
+        ).fetchone()
+        if row["blister_exhausted"] or (
+            row["current_x"],
+            row["current_y"],
+        ) != (0, 0):
+            raise ActiveDoseError("새 블리스터를 먼저 초기화해 주세요.")
+
+        schedule = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE id = ? AND status = 'FAILED' "
+            "AND error_code = 'EMPTY_BLISTER_SLOT' "
+            "AND acknowledged_at IS NULL",
+            (schedule_id,),
+        ).fetchone()
+        if schedule is None:
+            raise ActiveDoseError("재개할 빈 슬롯 복약 기록이 없습니다.")
+
+        move_request_id = allocate_request_id(conn)
+        conn.execute(
+            """
+            UPDATE schedules
+            SET status = 'MOVING',
+                x_coordinate = 0,
+                y_coordinate = 0,
+                move_request_id = ?,
+                move_allowed_seconds = ?,
+                move_sent_at = NULL,
+                move_ack_at = NULL,
+                ready_at = NULL,
+                dispense_request_id = NULL,
+                dispense_sent_at = NULL,
+                dispense_ack_at = NULL,
+                result_at = NULL,
+                completed_at = NULL,
+                error_code = 'EMPTY_BLISTER_SLOT',
+                acknowledged_at = NULL
+            WHERE id = ?
+            """,
+            (move_request_id, remaining_seconds, schedule_id),
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "EMPTY_BLISTER_MANUAL_NOT_TAKEN",
+            event_time,
+            detail="RETRY_FROM_00",
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "MOVE_PREPARED",
+            event_time,
+            request_id=move_request_id,
+            detail="EMPTY_BLISTER_RETRY",
+        )
+        conn.commit()
+        return get_schedule(schedule_id)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def complete_empty_blister_manual(schedule_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        state = conn.execute(
+            """
+            SELECT current_x, current_y, blister_exhausted
+            FROM device_state WHERE singleton = 1
+            """
+        ).fetchone()
+        if state["blister_exhausted"] or (
+            state["current_x"],
+            state["current_y"],
+        ) != (0, 0):
+            raise ActiveDoseError("새 블리스터를 먼저 초기화해 주세요.")
+
+        cursor = conn.execute(
+            """
+            UPDATE schedules
+            SET status = 'MANUALLY_COMPLETED',
+                completed_at = ?,
+                error_code = NULL,
+                acknowledged_at = NULL,
+                x_coordinate = 0,
+                y_coordinate = 0
+            WHERE id = ? AND status = 'FAILED'
+              AND error_code = 'EMPTY_BLISTER_SLOT'
+              AND acknowledged_at IS NULL
+            """,
+            (event_time, schedule_id),
+        )
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return None
+
+        coordinate_result = _advance_coordinate_in_transaction(conn, event_time)
+        _insert_event(
+            conn,
+            schedule_id,
+            "EMPTY_BLISTER_MANUAL_TAKEN",
+            event_time,
+            detail="00",
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "MANUALLY_COMPLETED",
+            event_time,
+            detail="EMPTY_BLISTER_SLOT",
+        )
+        conn.commit()
+        return coordinate_result
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def mark_failed(schedule_id, request_id, event_time, error_code="NO_DROP_DETECTED"):
@@ -930,6 +1230,7 @@ def acknowledge_result(schedule_id, event_time):
             UPDATE schedules
             SET acknowledged_at = COALESCE(acknowledged_at, ?)
             WHERE id = ? AND status IN ('FAILED', 'MISSED', 'COMM_ERROR')
+              AND COALESCE(error_code, '') != 'EMPTY_BLISTER_SLOT'
             """,
             (event_time, schedule_id),
         )
@@ -1057,6 +1358,7 @@ def _complete_and_advance(
     status,
     event_time,
     required_current_status="DISPENSING",
+    excluded_error_code=None,
 ):
     conn = connect_db()
     try:
@@ -1066,10 +1368,13 @@ def _complete_and_advance(
         if request_id is not None:
             clauses.append("dispense_request_id = ?")
             params.append(request_id)
+        if excluded_error_code is not None:
+            clauses.append("COALESCE(error_code, '') != ?")
+            params.append(excluded_error_code)
 
         cursor = conn.execute(
             "UPDATE schedules SET status = ?, result_at = COALESCE(result_at, ?), "
-            "completed_at = COALESCE(completed_at, ?), error_code = NULL WHERE "
+            "completed_at = ?, error_code = NULL WHERE "
             + " AND ".join(clauses),
             tuple(params),
         )
@@ -1186,6 +1491,15 @@ def reset_blister(event_time):
         ).fetchone()
         if active:
             raise ActiveDoseError("복약 처리 중에는 초기화할 수 없습니다.")
+        empty_slot_schedule = conn.execute(
+            """
+            SELECT id FROM schedules
+            WHERE status = 'FAILED'
+              AND error_code = 'EMPTY_BLISTER_SLOT'
+              AND acknowledged_at IS NULL
+            ORDER BY id LIMIT 1
+            """
+        ).fetchone()
         conn.execute(
             """
             UPDATE device_state
@@ -1195,7 +1509,25 @@ def reset_blister(event_time):
             """,
             (event_time,),
         )
-        _insert_event(conn, None, "BLISTER_RESET", event_time)
+        if empty_slot_schedule is not None:
+            conn.execute(
+                """
+                UPDATE schedules
+                SET x_coordinate = 0, y_coordinate = 0
+                WHERE id = ?
+                """,
+                (empty_slot_schedule["id"],),
+            )
+        _insert_event(
+            conn,
+            (
+                empty_slot_schedule["id"]
+                if empty_slot_schedule is not None
+                else None
+            ),
+            "BLISTER_RESET",
+            event_time,
+        )
         conn.commit()
     except Exception:
         conn.rollback()

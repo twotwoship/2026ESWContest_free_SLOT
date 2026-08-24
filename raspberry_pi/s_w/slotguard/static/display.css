@@ -425,6 +425,66 @@ body {
     font-size: 44px;
 }
 
+.lcd-empty-choice {
+    display: grid;
+    grid-template-rows: 46px minmax(0, 1fr);
+    gap: 7px;
+    width: 100%;
+    height: 100%;
+}
+
+.lcd-empty-choice-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 8px;
+    border-radius: 7px;
+    background: #101e2f;
+}
+
+.lcd-empty-choice-info h1,
+.lcd-empty-choice-info p {
+    overflow: hidden;
+    margin: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lcd-empty-choice-info h1 {
+    font-size: 20px;
+    font-weight: 900;
+}
+
+.lcd-empty-choice-info p {
+    color: #cbd5e1;
+    font-size: 16px;
+    font-weight: 800;
+}
+
+.lcd-empty-choice-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-height: 0;
+}
+
+.lcd-empty-choice-actions .lcd-empty-choice-button {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 4px;
+    border-radius: 10px;
+    font-size: clamp(30px, 7vw, 42px);
+    line-height: 1;
+}
+
+.lcd-empty-choice-actions .lcd-empty-choice-button:disabled {
+    opacity: 0.6;
+}
+
 .lcd-primary:active,
 .lcd-nav button:active,
 .lcd-stepper button:active {

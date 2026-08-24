@@ -1,3 +1,4 @@
+import math
 import re
 import threading
 import time
@@ -5,9 +6,11 @@ from datetime import datetime, timedelta
 
 from database import (
     ACTIVE_STATUSES,
+    ActiveDoseError,
     MAX_ALLOWED_SECONDS,
     assign_coordinate,
     complete_dispensed,
+    continue_after_empty_slot,
     get_active_schedule,
     get_current_coordinate,
     get_device_state,
@@ -15,6 +18,7 @@ from database import (
     get_schedule,
     get_schedule_by_dispense_request,
     get_unacknowledged_result,
+    is_result_request_processed,
     mark_comm_error,
     mark_dispense_ack,
     mark_failed,
@@ -25,6 +29,7 @@ from database import (
     prepare_move,
     record_dispense_sent,
     record_move_sent,
+    resume_after_empty_blister,
 )
 
 try:
@@ -39,7 +44,7 @@ ACK_RETRY_SECONDS = 10
 RECONNECT_SECONDS = 5
 
 REQUEST_ID_PATTERN = re.compile(r"^[0-9A-F]{8}$")
-RESULT_PATTERN = re.compile(r"^([01])([0-4])([01])$")
+RESULT_PATTERN = re.compile(r"^([01])([0-4])([012])$")
 ERROR_CODE_PATTERN = re.compile(r"^[A-Z0-9_-]{1,40}$")
 
 
@@ -247,6 +252,37 @@ class UartService:
         self._transmit_dispense(schedule, force=True)
         return get_schedule(schedule_id)
 
+    def resume_empty_blister_dose(self, schedule_id):
+        schedule = get_schedule(schedule_id)
+        if (
+            schedule is None
+            or schedule["status"] != "FAILED"
+            or schedule["error_code"] != "EMPTY_BLISTER_SLOT"
+            or schedule["acknowledged_at"] is not None
+        ):
+            raise ActiveDoseError("재개할 빈 슬롯 복약 기록이 없습니다.")
+
+        now = datetime.now()
+        now_text = self._format_time(now)
+        if now >= self._deadline_for(schedule):
+            mark_missed(schedule_id, now_text, "DOSE_WINDOW_EXPIRED")
+            self._run_callback(self.on_alert_stop)
+            self._clear_active_schedule()
+            return get_schedule(schedule_id)
+
+        remaining_seconds = self._remaining_seconds(schedule, now)
+        schedule = resume_after_empty_blister(
+            schedule_id,
+            now_text,
+            remaining_seconds,
+        )
+        with self._state_lock:
+            self._active_schedule_id = schedule_id
+            self._last_move_transmit_at = None
+            self._last_dispense_transmit_at = None
+        self._transmit_move(schedule, force=True)
+        return get_schedule(schedule_id)
+
     def get_status(self):
         with self._state_lock:
             return {
@@ -408,20 +444,23 @@ class UartService:
         request_id,
         x_coordinate,
         y_coordinate,
-        succeeded,
+        result_code,
     ):
         schedule = self._get_active_schedule()
         if schedule is None:
             previous = get_schedule_by_dispense_request(request_id)
-            if previous and previous["status"] in {
-                "DISPENSED",
-                "FAILED",
-                "MANUALLY_COMPLETED",
-            }:
+            if (
+                previous
+                and previous["status"]
+                in {"DISPENSED", "FAILED", "MANUALLY_COMPLETED"}
+            ) or is_result_request_processed(request_id):
                 self._write(build_result_ack(request_id))
             return
 
         if request_id != schedule["dispense_request_id"]:
+            if is_result_request_processed(request_id):
+                self._write(build_result_ack(request_id))
+                return
             self._set_error(
                 "RESULT 요청번호 불일치: "
                 f"예상={schedule['dispense_request_id']}, 수신={request_id}"
@@ -440,9 +479,10 @@ class UartService:
             )
             return
 
-        event_time = self._format_time(datetime.now())
+        now = datetime.now()
+        event_time = self._format_time(now)
         mark_dispense_ack(schedule["id"], request_id, event_time)
-        if succeeded:
+        if result_code == 1:
             coordinate_result = complete_dispensed(
                 schedule["id"],
                 request_id,
@@ -450,15 +490,37 @@ class UartService:
             )
             if coordinate_result and coordinate_result["blister_exhausted"]:
                 self._run_callback(self.on_blister_exhausted)
-        else:
+        elif result_code == 0:
             mark_failed(
                 schedule["id"],
                 request_id,
                 event_time,
                 "NO_DROP_DETECTED",
             )
+        else:
+            remaining_seconds = self._remaining_seconds(schedule, now)
+            coordinate_result = continue_after_empty_slot(
+                schedule["id"],
+                request_id,
+                event_time,
+                remaining_seconds,
+            )
 
         self._write(build_result_ack(request_id))
+        if result_code == 2 and coordinate_result is not None:
+            if coordinate_result["blister_exhausted"]:
+                self._run_callback(self.on_blister_exhausted)
+                self._clear_active_schedule()
+            else:
+                with self._state_lock:
+                    self._last_move_transmit_at = None
+                    self._last_dispense_transmit_at = None
+                self._transmit_move(
+                    coordinate_result["schedule"],
+                    force=True,
+                )
+            return
+
         self._run_callback(self.on_alert_stop)
         self._clear_active_schedule()
 
@@ -594,7 +656,7 @@ class UartService:
             schedule["move_request_id"],
             schedule["x_coordinate"],
             schedule["y_coordinate"],
-            schedule["allowed_seconds"],
+            schedule["move_allowed_seconds"] or schedule["allowed_seconds"],
         )
         if self._write(payload):
             record_move_sent(schedule["id"], self._format_time(datetime.now()))
@@ -657,6 +719,11 @@ class UartService:
             schedule["scheduled_at"], "%Y-%m-%d %H:%M"
         )
         return scheduled_at + timedelta(seconds=schedule["allowed_seconds"])
+
+    @classmethod
+    def _remaining_seconds(cls, schedule, now):
+        remaining = math.ceil((cls._deadline_for(schedule) - now).total_seconds())
+        return max(1, min(MAX_ALLOWED_SECONDS, remaining))
 
     @staticmethod
     def _format_time(value):

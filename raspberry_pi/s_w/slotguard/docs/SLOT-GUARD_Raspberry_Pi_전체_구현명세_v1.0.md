@@ -1,11 +1,11 @@
 # 약SLOT-GUARD Raspberry Pi 전체 구현명세
 
-문서 버전: v1.0  
-작성 기준일: 2026-08-23  
+문서 버전: v1.1  
+작성 기준일: 2026-08-24  
 대상: Raspberry Pi 소프트웨어·시스템 통합·시험 담당자  
 대상 장치: Raspberry Pi 4 Model B Rev 1.5  
 연동 장치: Waveshare 4inch RPi LCD (A) Rev 2.0, ATmega128A 제어보드, 헤드폰 오디오 출력  
-소프트웨어 기준: SLOT-GUARD 앱 v0.2.6, Raspberry Pi OS 64-bit / Debian 13 Trixie  
+소프트웨어 기준: SLOT-GUARD 앱 v0.3.0, Raspberry Pi OS 64-bit / Debian 13 Trixie  
 연관 문서: `ATmega128A_UART_구현명세_v1.0`, `SLOT-GUARD_4inch_LCD_UIUX_기획서_v0.2`
 
 ## 1. 문서 목적과 범위
@@ -162,7 +162,7 @@ Pi 전원 인가
   → 커널이 SPI LCD·UART 오버레이 로드
   → systemd가 slotguard.service 시작
   → app.py가 인증 설정 로드
-  → SQLite 스키마 생성·v4 마이그레이션
+  → SQLite 스키마 생성·v5 마이그레이션
   → UART 작업 스레드 시작
   → Flask가 0.0.0.0:5000 수신
   → LightDM이 지정 사용자로 자동 로그인
@@ -266,12 +266,13 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 ### 7.2 화면 우선순위
 
 ```text
-1순위: 확인되지 않은 FAILED / MISSED / COMM_ERROR
-2순위: 활성 MOVING / READY_TO_DISPENSE / DISPENSING
-3순위: 완료 후 5초 이내 DISPENSED / MANUALLY_COMPLETED
-4순위: 현재 부팅 시간 미설정 TIME_REQUIRED
-5순위: 블리스터 소진 BLISTER_EMPTY
-6순위: HOME 또는 사용자가 선택한 장치 상태·환경 설정
+1순위: 마지막 빈 슬롯의 BLISTER_EMPTY / EMPTY_BLISTER_CONFIRM
+2순위: 확인되지 않은 FAILED / MISSED / COMM_ERROR
+3순위: 활성 MOVING / READY_TO_DISPENSE / DISPENSING
+4순위: 완료 후 5초 이내 DISPENSED / MANUALLY_COMPLETED
+5순위: 현재 부팅 시간 미설정 TIME_REQUIRED
+6순위: 일반 블리스터 소진 BLISTER_EMPTY
+7순위: HOME 또는 사용자가 선택한 장치 상태·환경 설정
 ```
 
 ### 7.3 상태별 화면
@@ -279,7 +280,7 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 | 화면 상태 | 표시 내용 | 사용자 동작 | 다음 상태 |
 |---|---|---|---|
 | HOME | 다음 약·시각·남은 시간·최근 기록·슬롯 | 탭 이동 | 상태 변화에 따라 자동 전환 |
-| MOVING | 대상 약·슬롯·이동 중 경고 | 없음 | WAIT 수신 시 준비 |
+| MOVING | 대상 약·슬롯·이동 중 경고. 빈 슬롯 재이동이면 전용 문구 | 없음 | WAIT 수신 시 준비 |
 | READY_TO_DISPENSE | 복약 알림과 큰 약 배출 버튼 | 약 배출 | DISPENSING |
 | DISPENSING | 서보 동작 중 접근 금지 | 없음 | RESULT 대기 |
 | DISPENSED | 배출 확인 | 없음 | 5초 뒤 홈 |
@@ -288,7 +289,8 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 | MISSED | 허용시간 종료 | 화면 확인 | 홈 |
 | COMM_ERROR | UART 오류코드 | 화면 확인 | 홈 |
 | TIME_REQUIRED | 관리자 웹 시간 설정 안내 | 없음 | 시간 설정 후 홈 |
-| BLISTER_EMPTY | 새 블리스터 안내 | 2초 확인 후 초기화 | HOME |
+| BLISTER_EMPTY | 새 블리스터 안내 | 2초 확인 후 초기화 | 빈 슬롯 복약이면 수동 확인, 아니면 HOME |
+| EMPTY_BLISTER_CONFIRM | 새 블리스터 교체 후 복약 여부 | 대형 좌우 `수동복약` / `수동미복약` | 완료 또는 새 MOVE |
 | DEVICE_ERROR | DB 조회 오류 | 없음 | 오류 해소 후 자동 복구 |
 
 ### 7.4 LCD에서 가능한 쓰기 동작
@@ -297,6 +299,7 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 |---|---|---|
 | `/api/display/dispense` | localhost, READY 상태 | DISPENSE 준비·즉시 전송 |
 | `/api/display/manual-complete` | localhost, FAILED 상태 | 수동 완료와 좌표 1칸 증가 |
+| `/api/display/empty-blister-choice` | localhost, 마지막 빈 슬롯 교체 완료 | 수동 완료 또는 동일 복약 재개 |
 | `/api/display/acknowledge` | localhost, 실패 계열 상태 | 사용자 확인 기록 |
 | `/api/display/settings` | localhost | 음성 반복·볼륨 저장 |
 | `/api/display/test-volume` | localhost, 볼륨 1 이상 | 복약 음성 1회 재생 |
@@ -317,9 +320,15 @@ SCHEDULED
   │         └─ WAIT 수신 → READY_TO_DISPENSE
   │              ├─ 사용자가 약 배출 → DISPENSING
   │              │    ├─ RESULT의 R=1 → DISPENSED → 다음 좌표
-  │              │    └─ RESULT의 R=0 → FAILED → 좌표 유지
+  │              │    ├─ RESULT의 R=0 → FAILED → 좌표 유지
   │              │          ├─ 수동 복약 완료 → MANUALLY_COMPLETED → 다음 좌표
   │              │          └─ 복용하지 못함 → FAILED 확인 → 좌표 유지
+  │              │    └─ RESULT의 R=2 → EMPTY_BLISTER_SLOT 기록 → 다음 좌표
+  │              │          ├─ 다음 좌표 있음 → 새 MOVE → WAIT → 사용자 재배출
+  │              │          └─ 마지막 좌표 14
+  │              │                → 새 블리스터 초기화
+  │              │                → 수동복약: MANUALLY_COMPLETED, 00→01
+  │              │                → 수동미복약: 새 MOVE(00)로 동일 복약 재개
   │              └─ 허용시간 종료 → MISSED
   └─ 이미 허용시간이 지난 일정 발견 → MISSED
 
@@ -358,6 +367,35 @@ LCD: 수동 복약 완료 / 복용하지 못함 선택 대기
 - 사용자가 실제로 직접 복용했다고 확인한 경우에만 `MANUALLY_COMPLETED`로 바꾸고 좌표를 1칸 증가시킨다.
 - `복용하지 못함`은 실패 화면만 확인 처리하며 좌표는 유지한다.
 - 확인되지 않은 실패 결과가 있으면 다음 예약 처리를 차단한다.
+
+### 8.4 빈 슬롯 결과 R=2 정책
+
+```text
+AT → Pi: RESULT|00000002|002
+Pi: DISPENSE ACK 시각과 EMPTY_BLISTER_SLOT 이벤트 기록
+Pi: 현재 좌표 00을 사용 완료로 처리하고 좌표를 01로 증가
+Pi → AT: ACK|00000002|RESULT
+Pi: 새 요청번호와 현재 남은 허용시간으로 MOVE|00000003|0|1|TTTTTT 전송
+LCD: "현재 칸이 비어 있습니다. 다음 칸의 약으로 이동 중입니다."
+AT → Pi: WAIT|00000003
+LCD: 기존의 큰 약 배출 버튼 표시
+```
+
+- `R=2`는 압출기가 정상 동작했지만 해당 블리스터 슬롯이 비어 있음을 뜻한다.
+- Pi는 빈 슬롯을 사용 완료로 기록하고 좌표를 정확히 한 칸 증가시킨다.
+- RESULT ACK를 먼저 보낸 뒤 같은 복약 일정에 새 MOVE 요청번호를 발급한다.
+- 새 MOVE의 `TTTTTT`에는 예약 마감까지 현재 남은 초를 저장하여 전송하고, 해당 MOVE 재전송에서는 같은 요청번호와 페이로드를 유지한다.
+- WAIT 수신 후 자동 압출하지 않고 사용자가 기존 `약 배출` 버튼을 다시 눌러야 한다.
+- 연속 `XY2`이면 각 빈 좌표를 기록하며 같은 절차를 `XY1`이 올 때까지 반복한다.
+- 최종 `XY1`에서는 상태를 `DISPENSED`로 종료하고 `error_code`를 비운다.
+- 재시도 중 `XY0`이면 기존 R=0 실패 정책을 그대로 적용한다.
+- 이미 처리한 빈 슬롯 RESULT가 재수신되면 좌표를 다시 증가시키지 않고 RESULT ACK만 재전송한다.
+
+마지막 좌표 `14`에서 `142`를 받은 경우에는 소진 안내 후 새 블리스터 초기화를 요구한다. 초기화하면 좌표를 `00`으로 바꾸고 화면 전체의 약 배출 영역을 좌우 절반으로 나눈 대형 `수동복약` / `수동미복약` 버튼을 표시한다.
+
+- `수동복약`: 새 블리스터의 00번 약을 직접 복용한 것으로 기록하고 `MANUALLY_COMPLETED`, 좌표 `01`로 종료한다.
+- `수동미복약`: 실패로 종료하지 않고 새 요청번호와 남은 허용시간으로 좌표 00의 MOVE를 보내 동일 복약을 계속한다. WAIT 후 기존 약 배출 버튼을 표시한다.
+- 블리스터 교체 중 허용시간이 끝났다면 `수동미복약` 선택 시 새 MOVE를 보내지 않고 `MISSED / DOSE_WINDOW_EXPIRED`로 종료하며 좌표 00을 유지한다.
 
 ## 9. 예약 스케줄러와 시간 정책
 
@@ -422,6 +460,7 @@ deadline = scheduled_at + allowed_seconds
 - SQLite `request_sequence`에서 트랜잭션으로 증가시킨다.
 - 최대값 다음에는 `00000001`로 순환한다.
 - MOVE와 DISPENSE는 각각 새로운 요청번호를 사용한다.
+- `XY2` 후 다음 좌표 MOVE와 새 블리스터 `수동미복약` 재개 MOVE도 각각 새로운 요청번호를 사용한다.
 - 일정 삭제나 블리스터 초기화로 시퀀스를 되돌리지 않는다.
 
 ### 10.3 Pi 송신 프레임
@@ -434,9 +473,11 @@ ACK|RRRRRRRR|RESULT\n
 
 | 프레임 | 생성 시점 | 재전송 종료 |
 |---|---|---|
-| MOVE | 예약 도달과 좌표 배정 후 | MOVE ACK 수신 또는 허용시간 종료 |
+| MOVE | 예약 도달과 좌표 배정 후, 또는 빈 슬롯 후 재이동 | MOVE ACK 수신 또는 허용시간 종료 |
 | DISPENSE | LCD 약 배출 터치 후 | DISPENSE ACK 수신 또는 허용시간 종료 |
 | RESULT ACK | 유효 RESULT 수신 후 | 단발, 중복 RESULT에는 다시 전송 |
+
+최초 MOVE의 `TTTTTT`는 일정의 설정 허용시간이다. `XY2` 후 다음 좌표로 이동하거나 새 블리스터에서 `수동미복약`으로 재개할 때는 예약 시각과 허용시간으로 계산한 현재 남은 초를 별도 `move_allowed_seconds`에 저장한다. 같은 MOVE 요청번호를 재전송할 때는 시간이 흘러도 저장된 값을 바꾸지 않는다.
 
 ### 10.4 Pi 수신 프레임
 
@@ -453,7 +494,7 @@ ERROR|RRRRRRRR|ERROR_CODE\n
 | MOVE ACK | 활성 MOVE 요청번호·단계 | `move_ack_at` 기록 |
 | WAIT | 활성 MOVE 요청번호 | READY 상태와 `ready_at` 기록 |
 | DISPENSE ACK | 활성 DISPENSE 요청번호·단계 | `dispense_ack_at` 기록 |
-| RESULT | 요청번호와 실제 XY 일치 | 성공 또는 실패 종료 처리 |
+| RESULT | 요청번호와 실제 XY 및 결과코드 0·1·2 일치 | 성공·실패 종료 또는 빈 슬롯 다음 좌표 재이동 |
 | ERROR | 활성 MOVE·DISPENSE 요청번호 | `COMM_ERROR`, `AT_` 접두 오류 |
 
 WAIT는 MOVE ACK가 먼저 도착하지 않았더라도 유효 요청번호이면 ACK를 내포한 것으로 처리하여 `move_ack_at`과 `ready_at`을 함께 기록한다.
@@ -465,6 +506,7 @@ WAIT는 MOVE ACK가 먼저 도착하지 않았더라도 유효 요청번호이�
 - ASCII가 아닌 데이터는 버리고 UART 오류로 기록한다.
 - 256바이트를 넘도록 LF가 없으면 버퍼를 비우고 오류를 기록한다.
 - 요청번호, 좌표, RESULT의 XYR, 오류코드 형식을 정규식과 범위 검사로 검증한다.
+- RESULT의 R은 `0`, `1`, `2`만 허용한다.
 - 알 수 없는 프레임은 상태를 변경하지 않고 `last_error`와 journal에 남긴다.
 - 결과 좌표가 기대 좌표와 다르면 RESULT를 무시하고 일정은 `DISPENSING`에 유지한다.
 
@@ -473,6 +515,7 @@ WAIT는 MOVE ACK가 먼저 도착하지 않았더라도 유효 요청번호이�
 - MOVE ACK 전까지 같은 요청번호와 전체 페이로드를 10초마다 재사용한다.
 - DISPENSE ACK 전까지 같은 요청번호와 전체 페이로드를 10초마다 재사용한다.
 - 완료된 요청의 RESULT가 다시 오면 DB와 좌표를 다시 변경하지 않고 RESULT ACK만 다시 보낸다.
+- 다음 좌표로 진행한 뒤 이전 `XY2` RESULT가 다시 와도 `event_log`의 처리 요청번호를 확인하여 ACK만 다시 보낸다.
 - ATmega는 같은 MOVE·DISPENSE 요청을 재수신해도 물리 모터를 다시 구동하지 않아야 한다.
 - 현재 Pi 구현은 MOVE ACK를 받은 뒤 MOVE 재전송을 멈추므로, WAIT 유실 복구는 ATmega의 WAIT 재전송 또는 Pi 구현 보완이 필요하다.
 
@@ -507,9 +550,10 @@ XYR
 ```
 
 - 좌표는 예약 등록 시가 아니라 해당 예약이 실제 시작될 때 배정한다.
-- 센서 성공 `DISPENSED`에서만 자동으로 한 칸 증가한다.
+- 센서 성공 `DISPENSED`와 빈 슬롯 결과 `R=2`에서 자동으로 한 칸 증가한다.
 - 실패 후 사용자의 `MANUALLY_COMPLETED`에서도 한 칸 증가한다.
-- `FAILED`, `MISSED`, `COMM_ERROR`는 현재 좌표를 유지한다.
+- 마지막 빈 슬롯 교체 후 `수동복약`에서도 새 블리스터 좌표가 `00→01`로 증가한다.
+- `R=0`의 `FAILED`, `MISSED`, `COMM_ERROR`는 현재 좌표를 유지한다.
 - 좌표 증가와 일정 완료 상태 변경은 하나의 SQLite 트랜잭션으로 처리한다.
 - 마지막 좌표 `14`가 완료되면 좌표는 `14`에 남고 `blister_exhausted=1`이 된다.
 
@@ -520,6 +564,8 @@ XYR
 - `MOVING`, `READY_TO_DISPENSE`, `DISPENSING` 중에는 초기화를 거부한다.
 - 10번째 슬롯 완료 후에는 초기화 전까지 새 MOVE를 보내지 않는다.
 - LCD에서는 오동작 방지를 위해 2초간 확인 버튼을 누르게 한다.
+- 마지막 슬롯의 `R=2`로 교체한 경우 초기화 직후 `수동복약` 또는 `수동미복약` 선택을 완료할 때까지 다음 예약을 차단한다.
+- 이때 `수동미복약`은 좌표 00에서 동일 복약의 MOVE 흐름을 재개한다.
 
 ## 12. SQLite 데이터 모델
 
@@ -529,7 +575,7 @@ XYR
 - 환경변수 `SLOTGUARD_DB_PATH`로 시험 DB 경로를 바꿀 수 있다.
 - 연결 타임아웃은 5초다.
 - 외래키 검사를 연결마다 활성화한다.
-- 현재 스키마 버전은 `PRAGMA user_version = 4`다.
+- 현재 스키마 버전은 `PRAGMA user_version = 5`다.
 
 ### 12.2 테이블
 
@@ -548,7 +594,7 @@ XYR
 |---|---|
 | 예약 | `id`, `medicine_name`, `scheduled_at`, `allowed_seconds`, `status` |
 | 좌표 | `x_coordinate`, `y_coordinate` |
-| MOVE | `move_request_id`, `move_sent_at`, `move_ack_at`, `ready_at` |
+| MOVE | `move_request_id`, `move_allowed_seconds`, `move_sent_at`, `move_ack_at`, `ready_at` |
 | DISPENSE | `dispense_request_id`, `dispense_sent_at`, `dispense_ack_at` |
 | 결과 | `result_at`, `completed_at`, `error_code`, `acknowledged_at` |
 
@@ -558,7 +604,7 @@ XYR
 - 완료 상태와 좌표 증가는 같은 트랜잭션으로 묶어 이중 증가를 방지한다.
 - 중복 RESULT는 현재 상태 조건에 걸려 두 번째 좌표 증가가 발생하지 않는다.
 - 이벤트 로그의 일정 외래키는 일정 삭제 시 NULL로 바뀐다.
-- 레거시 DB는 시작 시 현재 v4 구조로 마이그레이션하며 기존 일정을 보존한다.
+- 레거시 DB는 시작 시 현재 v5 구조로 마이그레이션하며 기존 일정을 보존한다.
 
 ### 12.5 주요 이벤트
 
@@ -573,6 +619,9 @@ XYR
 | DISPENSE_ACK | 유효 ACK 또는 RESULT 수신 |
 | DISPENSED | R=1 완료 |
 | FAILED | R=0 또는 실패 처리 |
+| EMPTY_BLISTER_SLOT | R=2 좌표·요청번호 기록 |
+| EMPTY_BLISTER_MANUAL_TAKEN | 새 블리스터에서 수동복약 선택 |
+| EMPTY_BLISTER_MANUAL_NOT_TAKEN | 새 블리스터에서 수동미복약 선택, MOVE 재개 |
 | MISSED | 허용시간 종료 |
 | COMM_ERROR | 통신 단계 오류 |
 | RESULT_ACKNOWLEDGED | 사용자가 실패 화면 확인 |
@@ -710,6 +759,9 @@ XYR
 | DISPENSE ACK 없음 | DISPENSE_ACK_TIMEOUT | 통신 오류 | AT 서보 요청 수신 확인 |
 | ACK 후 RESULT 없음 | RESULT_TIMEOUT | 통신 오류 | 센서 판정과 RESULT 확인 |
 | RESULT R=0 | NO_DROP_DETECTED | 배출 실패 | 직접 복용 여부 선택 |
+| RESULT R=2, 다음 슬롯 있음 | EMPTY_BLISTER_SLOT 이벤트 | 다음 약 이동 중 | WAIT 후 약 배출 재선택 |
+| RESULT R=2, 마지막 슬롯 | EMPTY_BLISTER_SLOT | 블리스터 교체 | 초기화 후 수동복약 여부 선택 |
+| 교체 중 허용시간 종료 후 수동미복약 | DOSE_WINDOW_EXPIRED | 미복약 | 화면 확인 |
 | RESULT 좌표 불일치 | 일정 유지, UART 오류 | 배출 중 유지 | AT의 저장 좌표 확인 |
 | AT ERROR | `AT_오류코드` | 통신 오류 | AT 명세에 따라 점검 |
 | DB 읽기 오류 | DB-READ-ERROR | 장치 오류 | 파일·디스크·권한 확인 |
@@ -811,13 +863,16 @@ sudo reboot
 
 ### 20.1 자동시험
 
-현재 자동시험은 23개이며 다음 범주를 포함한다.
+현재 자동시험은 29개이며 다음 범주를 포함한다.
 
 - UART v2 프레임 생성·파싱
 - MOVE·DISPENSE 요청번호 분리
 - ACK 유실 재전송과 동일 요청번호 유지
 - WAIT의 암시적 MOVE ACK 처리
 - R=1 좌표 증가와 R=0 좌표 유지
+- R=2 연속 빈 슬롯의 새 요청번호·남은 시간 MOVE와 최종 R=1 완료
+- R=2 재이동 뒤 R=0에서 기존 실패·좌표 유지 정책 적용
+- 처리한 R=2 RESULT 중복 수신 시 ACK만 재전송
 - 수동 완료 좌표 1회 증가
 - 중복 RESULT의 좌표 중복 증가 방지
 - RESULT 좌표 불일치 무시
@@ -825,6 +880,10 @@ sudo reboot
 - 시스템 시간 미설정 시 스케줄러 차단
 - UART 부분 프레임 수신
 - 10번째 슬롯 소진과 초기화
+- 마지막 슬롯 R=2 후 초기화와 수동복약의 00→01 처리
+- 마지막 슬롯 R=2 후 수동미복약의 좌표 00 MOVE 재개
+- 블리스터 교체 중 허용시간 종료 시 MISSED와 MOVE 미전송
+- 수동복약·수동미복약 대형 좌우 버튼 레이아웃
 - 활성 일정 중 블리스터 초기화 차단
 - 음성 설정 영속성과 음소거
 - LCD localhost 쓰기 제한
@@ -867,6 +926,10 @@ sudo reboot
 | PI-24 | LCD 터치 | 모서리·연속 탭·길게 누름 동작 |
 | PI-25 | 네트워크 단절 | LCD·DB·UART·음성 지속 |
 | PI-26 | 안전 종료 | helper를 통한 정상 종료 |
+| PI-27 | RESULT R=2 | 빈 좌표 기록·1칸 증가, ACK 후 새 ID·남은 시간 MOVE |
+| PI-28 | 연속 R=2 후 R=1 | 매번 사용자 재배출, 최종 DISPENSED와 error_code 해제 |
+| PI-29 | 마지막 슬롯 R=2 | 교체 후 대형 수동복약·수동미복약 좌우 버튼 |
+| PI-30 | 마지막 빈 슬롯 선택 | 수동복약은 00→01 완료, 수동미복약은 00 MOVE, 만료 시 MISSED |
 
 ## 21. 현재 구현상 주의점과 보완 권고
 
@@ -927,7 +990,50 @@ LCD: 수동 복약 완료 또는 복용하지 못함 선택
   → 좌표 00 유지
 ```
 
-### 22.3 MOVE 응답 없음
+### 22.3 빈 슬롯과 같은 복약 재시도
+
+```text
+AT → Pi: RESULT|00000002|002
+Pi: 좌표 00의 EMPTY_BLISTER_SLOT 저장, 현재 좌표 01
+Pi → AT: ACK|00000002|RESULT
+Pi: 새 요청번호 00000003 발급, 남은 허용시간 003540 저장
+Pi → AT: MOVE|00000003|0|1|003540
+LCD: 현재 칸이 비어 있습니다. 다음 칸의 약으로 이동 중입니다.
+AT → Pi: ACK|00000003|MOVE
+AT → Pi: WAIT|00000003
+LCD: 약 배출 버튼 표시
+사용자가 약 배출 터치
+Pi → AT: DISPENSE|00000004|0|1
+AT → Pi: RESULT|00000004|011
+Pi: DISPENSED, error_code 비움, 현재 좌표 02
+Pi → AT: ACK|00000004|RESULT
+```
+
+마지막 슬롯이 빈 경우:
+
+```text
+AT → Pi: RESULT|00000002|142
+Pi: EMPTY_BLISTER_SLOT 기록, blister_exhausted=1
+Pi → AT: ACK|00000002|RESULT
+LCD: 새 블리스터 교체·초기화 안내
+사용자: 새 블리스터 초기화
+Pi: 좌표 00, 소진 상태 해제
+LCD: 수동복약 | 수동미복약 대형 좌우 버튼
+
+선택 A: 수동복약
+  → MANUALLY_COMPLETED
+  → 좌표 01
+
+선택 B: 수동미복약, 허용시간 남음
+  → 새 요청번호로 MOVE|...|0|0|남은시간
+  → WAIT 후 기존 약 배출 버튼
+
+선택 B: 수동미복약, 허용시간 종료
+  → MISSED / DOSE_WINDOW_EXPIRED
+  → 좌표 00 유지, MOVE 미전송
+```
+
+### 22.4 MOVE 응답 없음
 
 ```text
 Pi → AT: MOVE|00000001|0|0|003600
@@ -951,9 +1057,9 @@ Raspberry Pi 측 구현은 다음 조건을 모두 만족할 때 통합 완료�
 4. LCD가 모든 상태와 오류를 실제 DB·UART 상태에 맞게 표시한다.
 5. UART v2 요청번호, 재전송, RESULT 중복 방지가 ATmega와 함께 동작한다.
 6. `R=0`은 자동 좌표 이동이나 자동 재배출을 일으키지 않는다.
-7. 성공 또는 수동 완료에서만 좌표가 정확히 한 칸 증가한다.
-8. 10번째 슬롯 이후 블리스터 소진이 유지된다.
-9. 음성, 볼륨, 시간, 전원 helper가 재부팅 후에도 의도대로 동작한다.
-10. 자동시험과 PI-01~PI-26 실기 통합시험 기록이 남는다.
-11. NOTE-01~NOTE-10의 처리 여부가 릴리스 기록에 명시된다.
-
+7. `R=1`, `R=2` 또는 수동 완료에서만 좌표가 정확히 한 칸 증가한다.
+8. `R=2`는 새 요청번호·남은 시간 MOVE와 사용자 재배출을 거쳐 같은 복약을 계속한다.
+9. 10번째 슬롯 이후 블리스터 소진이 유지된다.
+10. 음성, 볼륨, 시간, 전원 helper가 재부팅 후에도 의도대로 동작한다.
+11. 자동시험과 PI-01~PI-30 실기 통합시험 기록이 남는다.
+12. NOTE-01~NOTE-10의 처리 여부가 릴리스 기록에 명시된다.

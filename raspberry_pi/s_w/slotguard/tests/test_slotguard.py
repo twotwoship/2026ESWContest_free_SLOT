@@ -78,6 +78,19 @@ class SlotguardTestCase(unittest.TestCase):
         service._connection_state = "CONNECTED"
         return service
 
+    def set_coordinate(self, x_coordinate, y_coordinate):
+        conn = database.connect_db()
+        conn.execute(
+            """
+            UPDATE device_state
+            SET current_x = ?, current_y = ?, blister_exhausted = 0
+            WHERE singleton = 1
+            """,
+            (x_coordinate, y_coordinate),
+        )
+        conn.commit()
+        conn.close()
+
     def start_move(self, service=None):
         schedule_id = self.create_schedule()
         service = service or self.make_service()
@@ -110,6 +123,7 @@ class SlotguardTestCase(unittest.TestCase):
             b"ACK|00000002|RESULT\n",
         )
         self.assertEqual(parse_result_message("141"), (1, 4, 1))
+        self.assertEqual(parse_result_message("142"), (1, 4, 2))
         self.assertEqual(
             parse_protocol_message("RESULT|00000002|140"),
             {
@@ -119,6 +133,7 @@ class SlotguardTestCase(unittest.TestCase):
             },
         )
         self.assertIsNone(parse_protocol_message("WAIT|invalid"))
+        self.assertIsNone(parse_result_message("143"))
 
     def test_schedule_requires_medicine_and_rejects_duplicate_time(self):
         schedule_id = self.create_schedule()
@@ -231,12 +246,99 @@ class SlotguardTestCase(unittest.TestCase):
     def test_failed_result_can_be_acknowledged_without_advancing(self):
         service, schedule_id, schedule = self.move_to_dispensing()
         service._handle_message(
-            f"RESULT|{schedule['dispense_request_id']}|000"
+            f"RESULT|{schedule['dispense_request_id']}|002"
         )
+        retry = database.get_schedule(schedule_id)
+        service._handle_message(f"WAIT|{retry['move_request_id']}")
+        retry = service.request_dispense(schedule_id)
+        service._handle_message(
+            f"RESULT|{retry['dispense_request_id']}|010"
+        )
+        failed = database.get_schedule(schedule_id)
+        self.assertEqual(failed["error_code"], "NO_DROP_DETECTED")
         self.assertIsNotNone(database.get_unacknowledged_result())
         database.acknowledge_result(schedule_id, self.now_seconds())
         self.assertIsNone(database.get_unacknowledged_result())
-        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+
+    def test_empty_slots_repeat_with_new_ids_until_success(self):
+        service, schedule_id, first_attempt = self.move_to_dispensing()
+        first_result = (
+            f"RESULT|{first_attempt['dispense_request_id']}|002"
+        )
+        service._handle_message(first_result)
+
+        first_retry = database.get_schedule(schedule_id)
+        self.assertEqual(first_retry["status"], "MOVING")
+        self.assertEqual(first_retry["error_code"], "EMPTY_BLISTER_SLOT")
+        self.assertEqual(
+            (first_retry["x_coordinate"], first_retry["y_coordinate"]),
+            (0, 1),
+        )
+        self.assertEqual(first_retry["move_request_id"], "00000003")
+        self.assertIsNone(first_retry["dispense_request_id"])
+        self.assertGreater(first_retry["move_allowed_seconds"], 0)
+        self.assertLessEqual(
+            first_retry["move_allowed_seconds"],
+            first_retry["allowed_seconds"],
+        )
+        self.assertEqual(
+            service._serial.writes[-2:],
+            [
+                b"ACK|00000002|RESULT\n",
+                (
+                    "MOVE|00000003|0|1|"
+                    f"{first_retry['move_allowed_seconds']:06d}\n"
+                ).encode("ascii"),
+            ],
+        )
+
+        retry_move_payload = service._serial.writes[-1]
+        service._last_schedule_check_at = 0
+        service._last_move_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes[-1], retry_move_payload)
+        self.assertEqual(
+            service._serial.writes.count(retry_move_payload),
+            2,
+        )
+
+        service._handle_message(first_result)
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertEqual(
+            service._serial.writes.count(b"ACK|00000002|RESULT\n"),
+            2,
+        )
+
+        service._handle_message("WAIT|00000003")
+        second_attempt = service.request_dispense(schedule_id)
+        self.assertEqual(second_attempt["dispense_request_id"], "00000004")
+        service._handle_message("RESULT|00000004|012")
+
+        second_retry = database.get_schedule(schedule_id)
+        self.assertEqual(second_retry["move_request_id"], "00000005")
+        self.assertEqual(database.get_current_coordinate(), (0, 2))
+        service._handle_message("WAIT|00000005")
+        final_attempt = service.request_dispense(schedule_id)
+        self.assertEqual(final_attempt["dispense_request_id"], "00000006")
+        service._handle_message("RESULT|00000006|021")
+
+        completed = database.get_schedule(schedule_id)
+        self.assertEqual(completed["status"], "DISPENSED")
+        self.assertIsNone(completed["error_code"])
+        self.assertEqual(database.get_current_coordinate(), (0, 3))
+        empty_events = [
+            event
+            for event in database.get_event_log()
+            if event["event_type"] == "EMPTY_BLISTER_SLOT"
+        ]
+        self.assertEqual(len(empty_events), 2)
+        self.assertEqual(
+            {event["detail"] for event in empty_events},
+            {"00", "01"},
+        )
 
     def test_duplicate_result_is_acknowledged_without_double_advance(self):
         service, schedule_id, schedule = self.move_to_dispensing()
@@ -350,6 +452,131 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertFalse(database.get_device_state()["blister_exhausted"])
         self.assertEqual(database.get_current_coordinate(), (0, 0))
         self.assertIsNotNone(database.get_schedule(future_id))
+
+    def test_last_empty_slot_reset_then_manual_taken_advances_new_blister(self):
+        self.set_coordinate(1, 4)
+        service, schedule_id, attempt = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{attempt['dispense_request_id']}|142"
+        )
+
+        empty = database.get_schedule(schedule_id)
+        self.assertEqual(empty["status"], "FAILED")
+        self.assertEqual(empty["error_code"], "EMPTY_BLISTER_SLOT")
+        self.assertTrue(database.get_device_state()["blister_exhausted"])
+        self.assertFalse(
+            database.acknowledge_result(schedule_id, self.now_seconds())
+        )
+        self.assertEqual(app.build_display_status()["screen"], "BLISTER_EMPTY")
+
+        database.reset_blister(self.now_seconds())
+        reset = database.get_schedule(schedule_id)
+        self.assertEqual(
+            (reset["x_coordinate"], reset["y_coordinate"]),
+            (0, 0),
+        )
+        self.assertEqual(
+            app.build_display_status()["screen"],
+            "EMPTY_BLISTER_CONFIRM",
+        )
+
+        response = app.app.test_client().post(
+            "/api/display/empty-blister-choice",
+            json={"schedule_id": schedule_id, "choice": "manual_taken"},
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        completed = database.get_schedule(schedule_id)
+        self.assertEqual(completed["status"], "MANUALLY_COMPLETED")
+        self.assertIsNone(completed["error_code"])
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+
+    def test_last_empty_slot_manual_not_taken_restarts_dispense_at_00(self):
+        self.set_coordinate(1, 4)
+        service, schedule_id, attempt = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{attempt['dispense_request_id']}|142"
+        )
+        database.reset_blister(self.now_seconds())
+
+        with patch.object(app, "uart_service", service):
+            response = app.app.test_client().post(
+                "/api/display/empty-blister-choice",
+                json={
+                    "schedule_id": schedule_id,
+                    "choice": "manual_not_taken",
+                },
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        self.assertEqual(response.status_code, 200)
+        resumed = database.get_schedule(schedule_id)
+        self.assertEqual(resumed["status"], "MOVING")
+        self.assertEqual(resumed["move_request_id"], "00000003")
+        self.assertEqual(
+            (resumed["x_coordinate"], resumed["y_coordinate"]),
+            (0, 0),
+        )
+        self.assertEqual(
+            service._serial.writes[-1],
+            (
+                "MOVE|00000003|0|0|"
+                f"{resumed['move_allowed_seconds']:06d}\n"
+            ).encode("ascii"),
+        )
+
+        service._handle_message("WAIT|00000003")
+        retry = service.request_dispense(schedule_id)
+        self.assertEqual(retry["dispense_request_id"], "00000004")
+        service._handle_message("RESULT|00000004|001")
+        completed = database.get_schedule(schedule_id)
+        self.assertEqual(completed["status"], "DISPENSED")
+        self.assertIsNone(completed["error_code"])
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+
+    def test_last_empty_slot_manual_not_taken_expires_as_missed(self):
+        self.set_coordinate(1, 4)
+        service, schedule_id, attempt = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{attempt['dispense_request_id']}|142"
+        )
+        database.reset_blister(self.now_seconds())
+        writes_before_resume = list(service._serial.writes)
+
+        conn = database.connect_db()
+        conn.execute(
+            "UPDATE schedules SET scheduled_at = ? WHERE id = ?",
+            (
+                (datetime.now() - timedelta(hours=2)).strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+                schedule_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        expired = service.resume_empty_blister_dose(schedule_id)
+        self.assertEqual(expired["status"], "MISSED")
+        self.assertEqual(expired["error_code"], "DOSE_WINDOW_EXPIRED")
+        self.assertEqual(service._serial.writes, writes_before_resume)
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+
+    def test_empty_blister_choice_uses_two_large_side_by_side_buttons(self):
+        base_dir = Path(__file__).resolve().parents[1]
+        javascript = (base_dir / "static" / "display.js").read_text(
+            encoding="utf-8"
+        )
+        stylesheet = (base_dir / "static" / "display.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("수동복약", javascript)
+        self.assertIn("수동미복약", javascript)
+        self.assertIn("lcd-empty-choice-actions", javascript)
+        self.assertIn(
+            "grid-template-columns: repeat(2, minmax(0, 1fr));",
+            stylesheet,
+        )
+        self.assertIn("font-size: clamp(30px, 7vw, 42px);", stylesheet)
 
     def test_blister_reset_is_blocked_during_active_dose(self):
         service, _, _ = self.start_move()
