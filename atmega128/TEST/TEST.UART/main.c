@@ -32,6 +32,6 @@ int main(void)
 	{
 		Task_UartRxProcess();   // 링버퍼 -> 프레임 추출 -> 파싱 -> FSM 디스패치
 
-		// TODO: Task_MotorPoll();  모터/서보 진행 상태 폴링 (다음 단계)
+		// Task_MotorPoll();  // 모터/서보 진행 상태 폴링 (다음 단계)
 	}
 }
