@@ -1,6 +1,6 @@
-# PROJECT : 약속(藥 SLOT)
+# PROJECT : 약속(藥 SLOT)은 지켜야제
 
-Team Name : 약속(藥SLOT)은 지켜야제
+Team Name : 약SLOT
 
 ● 자동으로 약을 밀어내는 디스펜서가 아닌, 원래 포장을 유지하면서 시스템이 목표 위치를 선택하고 사람이 최종 압출을 수행하는 반자동 복약 알림이를 구현
 
@@ -21,7 +21,9 @@ Team Name : 약속(藥SLOT)은 지켜야제
 * atmega128
 * atmega and rpi Integration
 
-**Other_people [ who_are_you ]**
+**Lee Hoyun [ nooyoh ]**
+
+* atmega128
 
 ## How to manage
 1. manager가 feature 브랜치에서 main 브랜치로의 PR을 확인하고 merge
@@ -54,3 +56,4 @@ Team Name : 약속(藥SLOT)은 지켜야제
   ```
   git commit -m "atmega128a_uart.c"
   ```
+* 모든 코드파일에는 맨 위에 이 파일이 어떤 역할 및 기능을 수행하는지 서술
