@@ -14,6 +14,34 @@ DEFAULT_VOICE_REPEAT = 1
 MIN_VOLUME_STEP = 0
 MAX_VOLUME_STEP = 10
 DEFAULT_VOLUME_STEP = 5
+LEGACY_SLOT_COORDINATE_PATH = (
+    (0, 0),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (0, 4),
+    (1, 0),
+    (1, 1),
+    (1, 2),
+    (1, 3),
+    (1, 4),
+)
+SLOT_COORDINATE_PATH = (
+    (0, 0),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (0, 4),
+    (1, 4),
+    (1, 3),
+    (1, 2),
+    (1, 1),
+    (1, 0),
+)
+SLOT_COORDINATE_PATHS = {
+    1: LEGACY_SLOT_COORDINATE_PATH,
+    2: SLOT_COORDINATE_PATH,
+}
 
 ACTIVE_STATUSES = {
     "MOVING",
@@ -71,7 +99,18 @@ SCHEDULE_SELECT = """
         result_at,
         completed_at,
         error_code,
-        acknowledged_at
+        acknowledged_at,
+        timeout_requested_at,
+        timeout_sent_at,
+        timeout_ack_at,
+        home_request_id,
+        home_requested_at,
+        home_move_sent_at,
+        home_move_ack_at,
+        home_ready_at,
+        home_timeout_sent_at,
+        home_timeout_ack_at,
+        home_error_code
     FROM schedules
 """
 
@@ -127,6 +166,17 @@ def _create_schedules_table(conn):
             completed_at          TEXT,
             error_code            TEXT,
             acknowledged_at       TEXT,
+            timeout_requested_at  TEXT,
+            timeout_sent_at       TEXT,
+            timeout_ack_at        TEXT,
+            home_request_id       TEXT,
+            home_requested_at     TEXT,
+            home_move_sent_at     TEXT,
+            home_move_ack_at      TEXT,
+            home_ready_at         TEXT,
+            home_timeout_sent_at  TEXT,
+            home_timeout_ack_at   TEXT,
+            home_error_code       TEXT,
 
             CHECK(length(medicine_name) BETWEEN 1 AND 30),
             CHECK(
@@ -150,6 +200,23 @@ def _ensure_schedule_retry_columns(conn):
             "ADD COLUMN move_allowed_seconds INTEGER "
             "CHECK(move_allowed_seconds BETWEEN 1 AND 999999)"
         )
+    for column_name in (
+        "timeout_requested_at",
+        "timeout_sent_at",
+        "timeout_ack_at",
+        "home_request_id",
+        "home_requested_at",
+        "home_move_sent_at",
+        "home_move_ack_at",
+        "home_ready_at",
+        "home_timeout_sent_at",
+        "home_timeout_ack_at",
+        "home_error_code",
+    ):
+        if column_name not in columns:
+            conn.execute(
+                f"ALTER TABLE schedules ADD COLUMN {column_name} TEXT"
+            )
     conn.execute(
         "UPDATE schedules SET move_allowed_seconds = allowed_seconds "
         "WHERE move_request_id IS NOT NULL AND move_allowed_seconds IS NULL"
@@ -221,9 +288,23 @@ def _migrate_schedules(conn):
                 result_at,
                 completed_at,
                 error_code,
-                acknowledged_at
+                acknowledged_at,
+                timeout_requested_at,
+                timeout_sent_at,
+                timeout_ack_at,
+                home_request_id,
+                home_requested_at,
+                home_move_sent_at,
+                home_move_ack_at,
+                home_ready_at,
+                home_timeout_sent_at,
+                home_timeout_ack_at,
+                home_error_code
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?
+            )
             """,
             (
                 _legacy_value(row, columns, "id"),
@@ -254,6 +335,17 @@ def _migrate_schedules(conn):
                 ),
                 _legacy_value(row, columns, "error_code"),
                 _legacy_value(row, columns, "acknowledged_at"),
+                _legacy_value(row, columns, "timeout_requested_at"),
+                _legacy_value(row, columns, "timeout_sent_at"),
+                _legacy_value(row, columns, "timeout_ack_at"),
+                _legacy_value(row, columns, "home_request_id"),
+                _legacy_value(row, columns, "home_requested_at"),
+                _legacy_value(row, columns, "home_move_sent_at"),
+                _legacy_value(row, columns, "home_move_ack_at"),
+                _legacy_value(row, columns, "home_ready_at"),
+                _legacy_value(row, columns, "home_timeout_sent_at"),
+                _legacy_value(row, columns, "home_timeout_ack_at"),
+                _legacy_value(row, columns, "home_error_code"),
             ),
         )
 
@@ -271,6 +363,8 @@ def _ensure_device_state(conn):
                                 CHECK(current_y BETWEEN 0 AND 4),
             blister_exhausted   INTEGER NOT NULL DEFAULT 0
                                 CHECK(blister_exhausted IN (0, 1)),
+            coordinate_path_version INTEGER NOT NULL DEFAULT 2
+                                CHECK(coordinate_path_version IN (1, 2)),
             updated_at          TEXT
         )
         """
@@ -284,6 +378,12 @@ def _ensure_device_state(conn):
             "ALTER TABLE device_state "
             "ADD COLUMN blister_exhausted INTEGER NOT NULL DEFAULT 0"
         )
+    if "coordinate_path_version" not in columns:
+        conn.execute(
+            "ALTER TABLE device_state "
+            "ADD COLUMN coordinate_path_version INTEGER NOT NULL DEFAULT 1 "
+            "CHECK(coordinate_path_version IN (1, 2))"
+        )
 
     conn.execute(
         """
@@ -296,8 +396,6 @@ def _ensure_device_state(conn):
         VALUES (1, 0, 0, 0)
         """
     )
-
-
 def _ensure_device_settings(conn):
     table = conn.execute(
         """
@@ -505,7 +603,7 @@ def init_db():
             ON event_log(created_at, id)
             """
         )
-        conn.execute("PRAGMA user_version = 5")
+        conn.execute("PRAGMA user_version = 8")
         conn.commit()
 
     except Exception:
@@ -600,6 +698,77 @@ def get_schedule_by_dispense_request(request_id):
         row = conn.execute(
             SCHEDULE_SELECT + " WHERE dispense_request_id = ?",
             (request_id,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_timeout_schedule_by_request(request_id):
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE move_request_id = ? "
+            "AND timeout_requested_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1",
+            (request_id,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_pending_timeout():
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE timeout_requested_at IS NOT NULL "
+            "AND timeout_ack_at IS NULL "
+            "ORDER BY timeout_requested_at, id LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_home_return_by_request(request_id):
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE home_request_id = ? ORDER BY id DESC LIMIT 1",
+            (request_id,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_pending_home_return():
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE home_request_id IS NOT NULL "
+            "AND home_timeout_ack_at IS NULL "
+            "AND home_error_code IS NULL "
+            "ORDER BY home_requested_at, id LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_blocking_home_return():
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE home_request_id IS NOT NULL "
+            "AND home_timeout_ack_at IS NULL "
+            "ORDER BY home_requested_at, id LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -912,6 +1081,310 @@ def record_dispense_sent(schedule_id, event_time):
     )
 
 
+def record_timeout_sent(schedule_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT move_request_id FROM schedules "
+            "WHERE id = ? AND timeout_requested_at IS NOT NULL "
+            "AND timeout_ack_at IS NULL",
+            (schedule_id,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+        conn.execute(
+            "UPDATE schedules "
+            "SET timeout_sent_at = COALESCE(timeout_sent_at, ?) "
+            "WHERE id = ?",
+            (event_time, schedule_id),
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "TIMEOUT_SENT",
+            event_time,
+            request_id=row["move_request_id"],
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def mark_timeout_ack(request_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT id, timeout_ack_at FROM schedules "
+            "WHERE move_request_id = ? "
+            "AND timeout_requested_at IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1",
+            (request_id,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+        if row["timeout_ack_at"] is None:
+            conn.execute(
+                "UPDATE schedules SET timeout_ack_at = ? WHERE id = ?",
+                (event_time, row["id"]),
+            )
+            _insert_event(
+                conn,
+                row["id"],
+                "TIMEOUT_ACK",
+                event_time,
+                request_id=request_id,
+            )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def prepare_home_return(schedule_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        schedule = conn.execute(
+            SCHEDULE_SELECT + " WHERE id = ?",
+            (schedule_id,),
+        ).fetchone()
+        state = conn.execute(
+            "SELECT blister_exhausted FROM device_state WHERE singleton = 1"
+        ).fetchone()
+        if (
+            schedule is None
+            or schedule["status"] not in {"DISPENSED", "FAILED"}
+            or not state["blister_exhausted"]
+        ):
+            raise ActiveDoseError("현재 원점 복귀를 시작할 수 없습니다.")
+
+        if schedule["home_request_id"] is None:
+            request_id = allocate_request_id(conn)
+            conn.execute(
+                """
+                UPDATE schedules
+                SET home_request_id = ?, home_requested_at = ?,
+                    home_move_sent_at = NULL, home_move_ack_at = NULL,
+                    home_ready_at = NULL, home_timeout_sent_at = NULL,
+                    home_timeout_ack_at = NULL, home_error_code = NULL
+                WHERE id = ?
+                """,
+                (request_id, event_time, schedule_id),
+            )
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_RETURN_PREPARED",
+                event_time,
+                request_id=request_id,
+                detail="00",
+            )
+        conn.commit()
+        return get_schedule(schedule_id)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def record_home_move_sent(schedule_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute(
+            "UPDATE schedules "
+            "SET home_move_sent_at = COALESCE(home_move_sent_at, ?) "
+            "WHERE id = ? AND home_request_id IS NOT NULL "
+            "AND home_timeout_ack_at IS NULL AND home_error_code IS NULL",
+            (event_time, schedule_id),
+        )
+        row = conn.execute(
+            "SELECT home_request_id FROM schedules WHERE id = ?",
+            (schedule_id,),
+        ).fetchone()
+        if row is not None:
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_MOVE_SENT",
+                event_time,
+                request_id=row["home_request_id"],
+                detail="00",
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def mark_home_move_ack(schedule_id, request_id, event_time):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            "UPDATE schedules "
+            "SET home_move_ack_at = COALESCE(home_move_ack_at, ?) "
+            "WHERE id = ? AND home_request_id = ? "
+            "AND home_timeout_ack_at IS NULL AND home_error_code IS NULL",
+            (event_time, schedule_id, request_id),
+        )
+        if cursor.rowcount:
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_MOVE_ACK",
+                event_time,
+                request_id=request_id,
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def mark_home_ready(schedule_id, request_id, event_time):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE schedules
+            SET home_move_ack_at = COALESCE(home_move_ack_at, ?),
+                home_ready_at = COALESCE(home_ready_at, ?)
+            WHERE id = ? AND home_request_id = ?
+              AND home_timeout_ack_at IS NULL AND home_error_code IS NULL
+            """,
+            (event_time, event_time, schedule_id, request_id),
+        )
+        if cursor.rowcount:
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_READY",
+                event_time,
+                request_id=request_id,
+                detail="00",
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def record_home_timeout_sent(schedule_id, event_time):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            "UPDATE schedules "
+            "SET home_timeout_sent_at = COALESCE(home_timeout_sent_at, ?) "
+            "WHERE id = ? AND home_ready_at IS NOT NULL "
+            "AND home_timeout_ack_at IS NULL AND home_error_code IS NULL",
+            (event_time, schedule_id),
+        )
+        row = conn.execute(
+            "SELECT home_request_id FROM schedules WHERE id = ?",
+            (schedule_id,),
+        ).fetchone()
+        if cursor.rowcount and row is not None:
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_TIMEOUT_SENT",
+                event_time,
+                request_id=row["home_request_id"],
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def complete_home_return(schedule_id, request_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT home_timeout_ack_at FROM schedules "
+            "WHERE id = ? AND home_request_id = ? "
+            "AND home_ready_at IS NOT NULL AND home_error_code IS NULL",
+            (schedule_id, request_id),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+        if row["home_timeout_ack_at"] is not None:
+            conn.commit()
+            return False
+
+        conn.execute(
+            "UPDATE schedules SET home_timeout_ack_at = ? WHERE id = ?",
+            (event_time, schedule_id),
+        )
+        conn.execute(
+            """
+            UPDATE device_state
+            SET current_x = 0, current_y = 0, updated_at = ?
+            WHERE singleton = 1
+            """,
+            (event_time,),
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "HOME_TIMEOUT_ACK",
+            event_time,
+            request_id=request_id,
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "HOME_RETURN_COMPLETED",
+            event_time,
+            request_id=request_id,
+            detail="00",
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def mark_home_return_error(schedule_id, request_id, event_time, error_code):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            "UPDATE schedules "
+            "SET home_error_code = COALESCE(home_error_code, ?) "
+            "WHERE id = ? AND home_request_id = ? "
+            "AND home_timeout_ack_at IS NULL",
+            (error_code, schedule_id, request_id),
+        )
+        if cursor.rowcount:
+            _insert_event(
+                conn,
+                schedule_id,
+                "HOME_RETURN_ERROR",
+                event_time,
+                request_id=request_id,
+                detail=error_code,
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def mark_dispense_ack(schedule_id, request_id, event_time):
     return _mark_request_time(
         schedule_id,
@@ -1169,13 +1642,17 @@ def complete_empty_blister_manual(schedule_id, event_time):
             conn.rollback()
             return None
 
-        coordinate_result = _advance_coordinate_in_transaction(conn, event_time)
+        coordinate_result = {
+            "previous": (0, 0),
+            "current": (0, 0),
+            "blister_exhausted": False,
+        }
         _insert_event(
             conn,
             schedule_id,
             "EMPTY_BLISTER_MANUAL_TAKEN",
             event_time,
-            detail="00",
+            detail="00_UNCHANGED",
         )
         _insert_event(
             conn,
@@ -1211,6 +1688,58 @@ def mark_missed(schedule_id, event_time, error_code="DOSE_WINDOW_EXPIRED"):
         event_time,
         error_code,
     )
+
+
+def mark_missed_and_queue_timeout(
+    schedule_id,
+    event_time,
+    error_code="DOSE_BUTTON_TIMEOUT",
+):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT move_request_id FROM schedules "
+            "WHERE id = ? AND status = 'READY_TO_DISPENSE'",
+            (schedule_id,),
+        ).fetchone()
+        if row is None or row["move_request_id"] is None:
+            conn.rollback()
+            return None
+
+        conn.execute(
+            "UPDATE schedules "
+            "SET status = 'MISSED', "
+            "result_at = COALESCE(result_at, ?), "
+            "completed_at = COALESCE(completed_at, ?), "
+            "error_code = ?, "
+            "timeout_requested_at = COALESCE(timeout_requested_at, ?) "
+            "WHERE id = ? AND status = 'READY_TO_DISPENSE'",
+            (event_time, event_time, error_code, event_time, schedule_id),
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "MISSED",
+            event_time,
+            request_id=row["move_request_id"],
+            detail=error_code,
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "TIMEOUT_QUEUED",
+            event_time,
+            request_id=row["move_request_id"],
+            detail=error_code,
+        )
+        conn.commit()
+        return get_schedule(schedule_id)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def mark_comm_error(schedule_id, event_time, error_code):
@@ -1402,24 +1931,25 @@ def _complete_and_advance(
 def _advance_coordinate_in_transaction(conn, event_time):
     row = conn.execute(
         """
-        SELECT current_x, current_y, blister_exhausted
+        SELECT current_x, current_y, blister_exhausted, coordinate_path_version
         FROM device_state WHERE singleton = 1
         """
     ).fetchone()
     current_x = row["current_x"]
     current_y = row["current_y"]
     blister_exhausted = bool(row["blister_exhausted"])
+    coordinate_path = SLOT_COORDINATE_PATHS[row["coordinate_path_version"]]
 
     if blister_exhausted:
         raise ActiveDoseError("새 블리스터 초기화가 필요합니다.")
 
-    exhausted_now = current_x == 1 and current_y == 4
+    current_coordinate = (current_x, current_y)
+    current_index = coordinate_path.index(current_coordinate)
+    exhausted_now = current_index == len(coordinate_path) - 1
     if exhausted_now:
         next_x, next_y = current_x, current_y
-    elif current_y < 4:
-        next_x, next_y = current_x, current_y + 1
     else:
-        next_x, next_y = 1, 0
+        next_x, next_y = coordinate_path[current_index + 1]
 
     conn.execute(
         """
@@ -1455,7 +1985,8 @@ def get_device_state():
     try:
         row = conn.execute(
             """
-            SELECT current_x, current_y, blister_exhausted, updated_at
+            SELECT current_x, current_y, blister_exhausted,
+                   coordinate_path_version, updated_at
             FROM device_state WHERE singleton = 1
             """
         ).fetchone()
@@ -1471,11 +2002,15 @@ def get_current_coordinate():
 
 def get_used_coordinates():
     state = get_device_state()
+    coordinate_path = SLOT_COORDINATE_PATHS[
+        state["coordinate_path_version"]
+    ]
     if state["blister_exhausted"]:
-        count = 10
+        count = len(coordinate_path)
     else:
-        count = state["current_x"] * 5 + state["current_y"]
-    return [(index // 5, index % 5) for index in range(count)]
+        current = (state["current_x"], state["current_y"])
+        count = coordinate_path.index(current)
+    return list(coordinate_path[:count])
 
 
 def reset_blister(event_time):
@@ -1491,6 +2026,16 @@ def reset_blister(event_time):
         ).fetchone()
         if active:
             raise ActiveDoseError("복약 처리 중에는 초기화할 수 없습니다.")
+        home_return = conn.execute(
+            """
+            SELECT id FROM schedules
+            WHERE home_request_id IS NOT NULL
+              AND home_timeout_ack_at IS NULL
+            LIMIT 1
+            """
+        ).fetchone()
+        if home_return:
+            raise ActiveDoseError("기구가 (0,0)으로 복귀할 때까지 기다려 주세요.")
         empty_slot_schedule = conn.execute(
             """
             SELECT id FROM schedules
@@ -1504,7 +2049,8 @@ def reset_blister(event_time):
             """
             UPDATE device_state
             SET current_x = 0, current_y = 0,
-                blister_exhausted = 0, updated_at = ?
+                blister_exhausted = 0, coordinate_path_version = 2,
+                updated_at = ?
             WHERE singleton = 1
             """,
             (event_time,),
@@ -1549,7 +2095,8 @@ def reset_schedules_and_position(event_time):
             """
             UPDATE device_state
             SET current_x = 0, current_y = 0,
-                blister_exhausted = 0, updated_at = ?
+                blister_exhausted = 0, coordinate_path_version = 2,
+                updated_at = ?
             WHERE singleton = 1
             """,
             (event_time,),

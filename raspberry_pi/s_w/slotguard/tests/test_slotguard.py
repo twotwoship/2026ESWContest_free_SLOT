@@ -14,6 +14,7 @@ from uart_service import (
     build_dispense_command,
     build_move_command,
     build_result_ack,
+    build_timeout_command,
     parse_protocol_message,
     parse_result_message,
 )
@@ -109,6 +110,23 @@ class SlotguardTestCase(unittest.TestCase):
         schedule = service.request_dispense(schedule_id)
         return service, schedule_id, schedule
 
+    def finish_home_return(self, service, schedule_id):
+        returning = database.get_schedule(schedule_id)
+        request_id = returning["home_request_id"]
+        self.assertIsNotNone(request_id)
+        self.assertEqual(
+            service._serial.writes[-1],
+            f"MOVE|{request_id}|0|0|000030\n".encode("ascii"),
+        )
+        service._handle_message(f"ACK|{request_id}|MOVE")
+        service._handle_message(f"WAIT|{request_id}")
+        self.assertEqual(
+            service._serial.writes[-1],
+            f"TIMEOUT|{request_id}\n".encode("ascii"),
+        )
+        service._handle_message(f"ACK|{request_id}|TIMEOUT")
+        return database.get_schedule(schedule_id)
+
     def test_protocol_v2_messages(self):
         self.assertEqual(
             build_move_command("00000001", 0, 0, 3600),
@@ -122,6 +140,18 @@ class SlotguardTestCase(unittest.TestCase):
             build_result_ack("00000002"),
             b"ACK|00000002|RESULT\n",
         )
+        self.assertEqual(
+            build_timeout_command("00000001"),
+            b"TIMEOUT|00000001\n",
+        )
+        self.assertEqual(
+            parse_protocol_message("ACK|00000001|TIMEOUT"),
+            {
+                "type": "ACK",
+                "request_id": "00000001",
+                "action": "TIMEOUT",
+            },
+        )
         self.assertEqual(parse_result_message("141"), (1, 4, 1))
         self.assertEqual(parse_result_message("142"), (1, 4, 2))
         self.assertEqual(
@@ -131,6 +161,13 @@ class SlotguardTestCase(unittest.TestCase):
                 "request_id": "00000002",
                 "result": (1, 4, 0),
             },
+        )
+        self.assertEqual(
+            parse_protocol_message("ERROR|INVALID_FORMAT"),
+            {"type": "INVALID_FORMAT"},
+        )
+        self.assertIsNone(
+            parse_protocol_message("ERROR|00000001|INVALID_FORMAT")
         )
         self.assertIsNone(parse_protocol_message("WAIT|invalid"))
         self.assertIsNone(parse_result_message("143"))
@@ -216,6 +253,61 @@ class SlotguardTestCase(unittest.TestCase):
         )
         service._process_schedules()
         self.assertEqual(service._serial.writes.count(dispense_payload), 2)
+
+    def test_invalid_format_retries_same_move_without_failing_schedule(self):
+        service, schedule_id, schedule = self.start_move()
+        payload = service._serial.writes[-1]
+        service._handle_message("ERROR|INVALID_FORMAT")
+
+        self.assertEqual(service._serial.writes, [payload, payload])
+        current = database.get_schedule(schedule_id)
+        self.assertEqual(current["status"], "MOVING")
+        self.assertIsNone(current["error_code"])
+
+    def test_invalid_format_without_previous_transmission_only_logs_error(self):
+        service = self.make_service()
+
+        service._handle_message("ERROR|INVALID_FORMAT")
+
+        self.assertEqual(service._serial.writes, [])
+        self.assertIn(
+            "재전송할 마지막 UART 프레임이 없습니다",
+            service.get_status()["last_error"],
+        )
+
+    def test_non_format_device_error_still_ends_as_comm_error(self):
+        service, schedule_id, schedule = self.start_move()
+        service._handle_message(
+            f"ERROR|{schedule['move_request_id']}|STEPPER_ERROR"
+        )
+
+        current = database.get_schedule(schedule_id)
+        self.assertEqual(current["status"], "COMM_ERROR")
+        self.assertEqual(current["error_code"], "AT_STEPPER_ERROR")
+        self.assertIsNone(service.get_status()["active_schedule_id"])
+
+    def test_invalid_format_retries_same_dispense_without_failing_schedule(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        payload = service._serial.writes[-1]
+        service._handle_message("ERROR|INVALID_FORMAT")
+
+        self.assertEqual(service._serial.writes.count(payload), 2)
+        current = database.get_schedule(schedule_id)
+        self.assertEqual(current["status"], "DISPENSING")
+        self.assertIsNone(current["error_code"])
+
+    def test_invalid_format_retries_result_ack_after_completion(self):
+        service, schedule_id, schedule = self.move_to_dispensing()
+        request_id = schedule["dispense_request_id"]
+        service._handle_message(f"RESULT|{request_id}|001")
+        ack_payload = build_result_ack(request_id)
+        service._handle_message("ERROR|INVALID_FORMAT")
+
+        self.assertEqual(service._serial.writes.count(ack_payload), 2)
+        self.assertEqual(
+            database.get_schedule(schedule_id)["status"],
+            "DISPENSED",
+        )
 
     def test_wait_is_implicit_move_ack_and_enables_button(self):
         service, schedule_id, schedule = self.start_move()
@@ -374,7 +466,112 @@ class SlotguardTestCase(unittest.TestCase):
         schedule = database.get_schedule(schedule_id)
         self.assertEqual(schedule["status"], "MISSED")
         self.assertEqual(schedule["error_code"], "DOSE_WINDOW_EXPIRED")
+        self.assertIsNone(schedule["timeout_requested_at"])
         self.assertEqual(service._serial.writes, [])
+
+    def test_ready_timeout_is_persisted_retried_and_acknowledged(self):
+        service, schedule_id, schedule = self.move_to_ready()
+        request_id = schedule["move_request_id"]
+        timeout_payload = build_timeout_command(request_id)
+        conn = database.connect_db()
+        conn.execute(
+            "UPDATE schedules SET scheduled_at = ? WHERE id = ?",
+            (
+                (datetime.now() - timedelta(hours=2)).strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+                schedule_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        expired = database.get_schedule(schedule_id)
+        self.assertEqual(expired["status"], "MISSED")
+        self.assertEqual(expired["error_code"], "DOSE_BUTTON_TIMEOUT")
+        self.assertIsNotNone(expired["timeout_requested_at"])
+        self.assertIsNotNone(expired["timeout_sent_at"])
+        self.assertIsNone(expired["timeout_ack_at"])
+        self.assertEqual(service._serial.writes[-1], timeout_payload)
+
+        service._last_schedule_check_at = 0
+        service._last_timeout_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes.count(timeout_payload), 2)
+
+        database.acknowledge_result(schedule_id, self.now_seconds())
+        next_schedule_id = self.create_schedule()
+        restarted_service = self.make_service()
+        restarted_service._process_schedules()
+        self.assertEqual(restarted_service._serial.writes, [timeout_payload])
+        self.assertEqual(
+            database.get_schedule(next_schedule_id)["status"],
+            "SCHEDULED",
+        )
+
+        restarted_service._handle_message(f"ACK|{request_id}|TIMEOUT")
+        acknowledged = database.get_schedule(schedule_id)
+        self.assertIsNotNone(acknowledged["timeout_ack_at"])
+        self.assertIsNone(database.get_pending_timeout())
+
+        restarted_service._last_schedule_check_at = 0
+        restarted_service._process_schedules()
+        self.assertEqual(
+            database.get_schedule(next_schedule_id)["status"],
+            "MOVING",
+        )
+
+        restarted_service._handle_message(f"ACK|{request_id}|TIMEOUT")
+        self.assertNotIn(
+            "불일치",
+            restarted_service.get_status()["last_error"] or "",
+        )
+
+    def test_expired_dispense_request_queues_timeout(self):
+        service, schedule_id, schedule = self.move_to_ready()
+        conn = database.connect_db()
+        conn.execute(
+            "UPDATE schedules SET scheduled_at = ? WHERE id = ?",
+            (
+                (datetime.now() - timedelta(hours=2)).strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+                schedule_id,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        with self.assertRaisesRegex(ValueError, "허용시간"):
+            service.request_dispense(schedule_id)
+        expired = database.get_schedule(schedule_id)
+        self.assertEqual(expired["status"], "MISSED")
+        self.assertEqual(
+            service._serial.writes[-1],
+            build_timeout_command(schedule["move_request_id"]),
+        )
+
+    def test_invalid_format_retries_same_timeout_without_changing_missed(self):
+        service, schedule_id, schedule = self.move_to_ready()
+        request_id = schedule["move_request_id"]
+        expired = database.mark_missed_and_queue_timeout(
+            schedule_id,
+            self.now_seconds(),
+        )
+        service._clear_active_schedule()
+        service._transmit_timeout(expired, force=True)
+        timeout_payload = build_timeout_command(request_id)
+
+        service._handle_message("ERROR|INVALID_FORMAT")
+
+        self.assertEqual(service._serial.writes.count(timeout_payload), 2)
+        current = database.get_schedule(schedule_id)
+        self.assertEqual(current["status"], "MISSED")
+        self.assertIsNone(current["timeout_ack_at"])
 
     def test_move_ack_timeout_is_comm_error(self):
         service, schedule_id, schedule = self.start_move()
@@ -395,6 +592,11 @@ class SlotguardTestCase(unittest.TestCase):
         expired = database.get_schedule(schedule_id)
         self.assertEqual(expired["status"], "COMM_ERROR")
         self.assertEqual(expired["error_code"], "MOVE_ACK_TIMEOUT")
+        self.assertIsNone(expired["timeout_requested_at"])
+        self.assertNotIn(
+            build_timeout_command(schedule["move_request_id"]),
+            service._serial.writes,
+        )
 
     def test_scheduler_is_blocked_until_system_time_is_set(self):
         schedule_id = self.create_schedule()
@@ -416,12 +618,35 @@ class SlotguardTestCase(unittest.TestCase):
         service._read_available_lines()
         self.assertIsNotNone(database.get_schedule(schedule_id)["move_ack_at"])
 
+    def test_serpentine_coordinate_path_reduces_row_transition(self):
+        expected_coordinates = [
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (1, 4),
+            (1, 3),
+            (1, 2),
+            (1, 1),
+            (1, 0),
+            (1, 0),
+        ]
+        for expected in expected_coordinates:
+            result = database.advance_coordinate(self.now_seconds())
+            self.assertEqual(result["current"], expected)
+
+        self.assertTrue(result["blister_exhausted"])
+        self.assertEqual(
+            database.get_used_coordinates(),
+            list(database.SLOT_COORDINATE_PATH),
+        )
+
     def test_last_slot_stays_exhausted_until_gui_reset(self):
         conn = database.connect_db()
         conn.execute(
             """
             UPDATE device_state
-            SET current_x = 1, current_y = 4, blister_exhausted = 0
+            SET current_x = 1, current_y = 0, blister_exhausted = 0
             WHERE singleton = 1
             """
         )
@@ -443,21 +668,29 @@ class SlotguardTestCase(unittest.TestCase):
         service._handle_message(f"WAIT|{active['move_request_id']}")
         active = service.request_dispense(active_id)
         service._handle_message(
-            f"RESULT|{active['dispense_request_id']}|141"
+            f"RESULT|{active['dispense_request_id']}|101"
         )
         self.assertTrue(database.get_device_state()["blister_exhausted"])
         self.assertEqual(len(database.get_used_coordinates()), 10)
+        self.assertEqual(database.get_current_coordinate(), (1, 0))
+        self.assertEqual(app.build_display_status()["screen"], "RETURNING_HOME")
+        with self.assertRaisesRegex(database.ActiveDoseError, "복귀"):
+            database.reset_blister(self.now_seconds())
+
+        self.finish_home_return(service, active_id)
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(app.build_display_status()["screen"], "BLISTER_EMPTY")
 
         database.reset_blister(self.now_seconds())
         self.assertFalse(database.get_device_state()["blister_exhausted"])
         self.assertEqual(database.get_current_coordinate(), (0, 0))
         self.assertIsNotNone(database.get_schedule(future_id))
 
-    def test_last_empty_slot_reset_then_manual_taken_advances_new_blister(self):
-        self.set_coordinate(1, 4)
+    def test_last_empty_slot_manual_taken_keeps_new_blister_at_00(self):
+        self.set_coordinate(1, 0)
         service, schedule_id, attempt = self.move_to_dispensing()
         service._handle_message(
-            f"RESULT|{attempt['dispense_request_id']}|142"
+            f"RESULT|{attempt['dispense_request_id']}|102"
         )
 
         empty = database.get_schedule(schedule_id)
@@ -467,6 +700,9 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertFalse(
             database.acknowledge_result(schedule_id, self.now_seconds())
         )
+        self.assertEqual(app.build_display_status()["screen"], "RETURNING_HOME")
+
+        self.finish_home_return(service, schedule_id)
         self.assertEqual(app.build_display_status()["screen"], "BLISTER_EMPTY")
 
         database.reset_blister(self.now_seconds())
@@ -489,14 +725,15 @@ class SlotguardTestCase(unittest.TestCase):
         completed = database.get_schedule(schedule_id)
         self.assertEqual(completed["status"], "MANUALLY_COMPLETED")
         self.assertIsNone(completed["error_code"])
-        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
 
     def test_last_empty_slot_manual_not_taken_restarts_dispense_at_00(self):
-        self.set_coordinate(1, 4)
+        self.set_coordinate(1, 0)
         service, schedule_id, attempt = self.move_to_dispensing()
         service._handle_message(
-            f"RESULT|{attempt['dispense_request_id']}|142"
+            f"RESULT|{attempt['dispense_request_id']}|102"
         )
+        self.finish_home_return(service, schedule_id)
         database.reset_blister(self.now_seconds())
 
         with patch.object(app, "uart_service", service):
@@ -511,7 +748,7 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         resumed = database.get_schedule(schedule_id)
         self.assertEqual(resumed["status"], "MOVING")
-        self.assertEqual(resumed["move_request_id"], "00000003")
+        self.assertEqual(resumed["move_request_id"], "00000004")
         self.assertEqual(
             (resumed["x_coordinate"], resumed["y_coordinate"]),
             (0, 0),
@@ -519,26 +756,27 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertEqual(
             service._serial.writes[-1],
             (
-                "MOVE|00000003|0|0|"
+                "MOVE|00000004|0|0|"
                 f"{resumed['move_allowed_seconds']:06d}\n"
             ).encode("ascii"),
         )
 
-        service._handle_message("WAIT|00000003")
+        service._handle_message("WAIT|00000004")
         retry = service.request_dispense(schedule_id)
-        self.assertEqual(retry["dispense_request_id"], "00000004")
-        service._handle_message("RESULT|00000004|001")
+        self.assertEqual(retry["dispense_request_id"], "00000005")
+        service._handle_message("RESULT|00000005|001")
         completed = database.get_schedule(schedule_id)
         self.assertEqual(completed["status"], "DISPENSED")
         self.assertIsNone(completed["error_code"])
         self.assertEqual(database.get_current_coordinate(), (0, 1))
 
     def test_last_empty_slot_manual_not_taken_expires_as_missed(self):
-        self.set_coordinate(1, 4)
+        self.set_coordinate(1, 0)
         service, schedule_id, attempt = self.move_to_dispensing()
         service._handle_message(
-            f"RESULT|{attempt['dispense_request_id']}|142"
+            f"RESULT|{attempt['dispense_request_id']}|102"
         )
+        self.finish_home_return(service, schedule_id)
         database.reset_blister(self.now_seconds())
         writes_before_resume = list(service._serial.writes)
 
@@ -785,6 +1023,59 @@ class SlotguardTestCase(unittest.TestCase):
         schedule = database.get_schedules()[0]
         self.assertEqual(schedule["medicine_name"], "등록된 약")
         self.assertEqual(schedule["status"], "SCHEDULED")
+        self.assertIsNone(schedule["timeout_requested_at"])
+        self.assertIsNone(schedule["timeout_sent_at"])
+        self.assertIsNone(schedule["timeout_ack_at"])
+
+    def test_v6_blister_keeps_legacy_path_until_reset(self):
+        conn = database.connect_db()
+        conn.execute(
+            "ALTER TABLE device_state RENAME TO device_state_v7"
+        )
+        conn.execute(
+            """
+            CREATE TABLE device_state (
+                singleton INTEGER PRIMARY KEY,
+                current_x INTEGER NOT NULL,
+                current_y INTEGER NOT NULL,
+                blister_exhausted INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO device_state (singleton, current_x, current_y) "
+            "VALUES (1, 1, 0)"
+        )
+        conn.execute("DROP TABLE device_state_v7")
+        conn.execute("PRAGMA user_version = 6")
+        conn.commit()
+        conn.close()
+
+        database.init_db()
+        self.assertEqual(database.get_current_coordinate(), (1, 0))
+        self.assertEqual(
+            database.get_device_state()["coordinate_path_version"],
+            1,
+        )
+        self.assertEqual(
+            database.advance_coordinate(self.now_seconds())["current"],
+            (1, 1),
+        )
+        conn = database.connect_db()
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+        conn.close()
+
+        database.reset_blister(self.now_seconds())
+        self.assertEqual(
+            database.get_device_state()["coordinate_path_version"],
+            2,
+        )
+        self.set_coordinate(0, 4)
+        self.assertEqual(
+            database.advance_coordinate(self.now_seconds())["current"],
+            (1, 4),
+        )
 
 
 if __name__ == "__main__":

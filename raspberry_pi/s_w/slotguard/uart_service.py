@@ -9,26 +9,40 @@ from database import (
     ActiveDoseError,
     MAX_ALLOWED_SECONDS,
     assign_coordinate,
+    complete_home_return,
     complete_dispensed,
     continue_after_empty_slot,
     get_active_schedule,
     get_current_coordinate,
     get_device_state,
     get_due_schedule,
+    get_home_return_by_request,
+    get_pending_home_return,
+    get_pending_timeout,
     get_schedule,
     get_schedule_by_dispense_request,
+    get_timeout_schedule_by_request,
     get_unacknowledged_result,
     is_result_request_processed,
     mark_comm_error,
     mark_dispense_ack,
     mark_failed,
+    mark_home_move_ack,
+    mark_home_ready,
+    mark_home_return_error,
     mark_missed,
+    mark_missed_and_queue_timeout,
     mark_move_ack,
     mark_ready,
+    mark_timeout_ack,
     prepare_dispense,
+    prepare_home_return,
     prepare_move,
     record_dispense_sent,
+    record_home_move_sent,
+    record_home_timeout_sent,
     record_move_sent,
+    record_timeout_sent,
     resume_after_empty_blister,
 )
 
@@ -42,6 +56,7 @@ UART_PORT = "/dev/serial0"
 UART_BAUD_RATE = 9600
 ACK_RETRY_SECONDS = 10
 RECONNECT_SECONDS = 5
+HOME_RETURN_ALLOWED_SECONDS = 30
 
 REQUEST_ID_PATTERN = re.compile(r"^[0-9A-F]{8}$")
 RESULT_PATTERN = re.compile(r"^([01])([0-4])([012])$")
@@ -89,6 +104,11 @@ def build_dispense_command(request_id, x_coordinate, y_coordinate):
     ).encode("ascii")
 
 
+def build_timeout_command(request_id):
+    _validate_request_id(request_id)
+    return f"TIMEOUT|{request_id}\n".encode("ascii")
+
+
 def build_result_ack(request_id):
     _validate_request_id(request_id)
     return f"ACK|{request_id}|RESULT\n".encode("ascii")
@@ -104,11 +124,14 @@ def parse_result_message(message):
 def parse_protocol_message(message):
     parts = message.split("|")
 
+    if parts == ["ERROR", "INVALID_FORMAT"]:
+        return {"type": "INVALID_FORMAT"}
+
     if len(parts) == 3 and parts[0] == "ACK":
         request_id, action = parts[1], parts[2]
         if (
             REQUEST_ID_PATTERN.fullmatch(request_id)
-            and action in {"MOVE", "DISPENSE", "RESULT"}
+            and action in {"MOVE", "DISPENSE", "RESULT", "TIMEOUT"}
         ):
             return {
                 "type": "ACK",
@@ -136,6 +159,7 @@ def parse_protocol_message(message):
         if (
             REQUEST_ID_PATTERN.fullmatch(request_id)
             and ERROR_CODE_PATTERN.fullmatch(error_code)
+            and error_code != "INVALID_FORMAT"
         ):
             return {
                 "type": "ERROR",
@@ -183,9 +207,13 @@ class UartService:
         self._active_schedule_id = None
         self._last_move_transmit_at = None
         self._last_dispense_transmit_at = None
+        self._last_timeout_transmit_at = None
+        self._last_home_move_transmit_at = None
+        self._last_home_timeout_transmit_at = None
         self._next_reconnect_at = 0
         self._last_schedule_check_at = 0
         self._receive_buffer = bytearray()
+        self._last_transmitted_payload = None
 
         self._connection_state = "STOPPED"
         self._last_message = None
@@ -218,6 +246,10 @@ class UartService:
             self._active_schedule_id = None
             self._last_move_transmit_at = None
             self._last_dispense_transmit_at = None
+            self._last_timeout_transmit_at = None
+            self._last_home_move_transmit_at = None
+            self._last_home_timeout_transmit_at = None
+            self._last_transmitted_payload = None
 
     def cancel_schedule(self, schedule_id):
         with self._state_lock:
@@ -235,13 +267,15 @@ class UartService:
 
         now = datetime.now()
         if now >= self._deadline_for(schedule):
-            mark_missed(
+            expired = mark_missed_and_queue_timeout(
                 schedule_id,
                 self._format_time(now),
                 "DOSE_BUTTON_TIMEOUT",
             )
             self._run_callback(self.on_alert_stop)
             self._clear_active_schedule()
+            if expired is not None:
+                self._transmit_timeout(expired, force=True)
             raise ValueError("복약 허용시간이 종료되었습니다.")
 
         schedule = prepare_dispense(schedule_id, self._format_time(now))
@@ -396,6 +430,8 @@ class UartService:
             self._handle_wait(parsed["request_id"])
         elif message_type == "RESULT":
             self._handle_result(parsed["request_id"], *parsed["result"])
+        elif message_type == "INVALID_FORMAT":
+            self._retry_last_transmission()
         elif message_type == "ERROR":
             self._handle_device_error(
                 parsed["request_id"],
@@ -405,10 +441,43 @@ class UartService:
             self._handle_legacy(parsed)
 
     def _handle_ack(self, request_id, action):
+        event_time = self._format_time(datetime.now())
+
+        home_return = get_home_return_by_request(request_id)
+        if home_return is not None:
+            if action == "MOVE":
+                mark_home_move_ack(
+                    home_return["id"],
+                    request_id,
+                    event_time,
+                )
+                return
+            if action == "TIMEOUT":
+                completed_now = complete_home_return(
+                    home_return["id"],
+                    request_id,
+                    event_time,
+                )
+                self._last_home_move_transmit_at = None
+                self._last_home_timeout_transmit_at = None
+                if completed_now:
+                    self._run_callback(self.on_blister_exhausted)
+                return
+
+        if action == "TIMEOUT":
+            timeout_schedule = get_timeout_schedule_by_request(request_id)
+            if timeout_schedule is None:
+                self._set_error(
+                    f"TIMEOUT ACK 요청번호 불일치: request_id={request_id}"
+                )
+                return
+            mark_timeout_ack(request_id, event_time)
+            self._last_timeout_transmit_at = None
+            return
+
         schedule = self._get_active_schedule()
         if schedule is None:
             return
-        event_time = self._format_time(datetime.now())
 
         if action == "MOVE" and request_id == schedule["move_request_id"]:
             mark_move_ack(schedule["id"], request_id, event_time)
@@ -424,6 +493,24 @@ class UartService:
             )
 
     def _handle_wait(self, request_id):
+        home_return = get_home_return_by_request(request_id)
+        if home_return is not None:
+            if home_return["home_timeout_ack_at"] is not None:
+                return
+            if home_return["home_error_code"] is not None:
+                self._set_error(
+                    "실패 처리된 원점 복귀 WAIT를 수신했습니다: "
+                    f"request_id={request_id}"
+                )
+                return
+            event_time = self._format_time(datetime.now())
+            mark_home_ready(home_return["id"], request_id, event_time)
+            self._last_home_move_transmit_at = None
+            self._last_home_timeout_transmit_at = None
+            refreshed = get_schedule(home_return["id"])
+            self._transmit_home_timeout(refreshed, force=True)
+            return
+
         schedule = self._get_active_schedule()
         if schedule is None:
             return
@@ -481,6 +568,7 @@ class UartService:
 
         now = datetime.now()
         event_time = self._format_time(now)
+        home_return = None
         mark_dispense_ack(schedule["id"], request_id, event_time)
         if result_code == 1:
             coordinate_result = complete_dispensed(
@@ -489,7 +577,7 @@ class UartService:
                 event_time,
             )
             if coordinate_result and coordinate_result["blister_exhausted"]:
-                self._run_callback(self.on_blister_exhausted)
+                home_return = prepare_home_return(schedule["id"], event_time)
         elif result_code == 0:
             mark_failed(
                 schedule["id"],
@@ -505,11 +593,20 @@ class UartService:
                 event_time,
                 remaining_seconds,
             )
+            if coordinate_result and coordinate_result["blister_exhausted"]:
+                home_return = prepare_home_return(schedule["id"], event_time)
 
         self._write(build_result_ack(request_id))
+        if home_return is not None:
+            self._run_callback(self.on_alert_stop)
+            self._clear_active_schedule()
+            self._last_home_move_transmit_at = None
+            self._last_home_timeout_transmit_at = None
+            self._transmit_home_move(home_return, force=True)
+            return
+
         if result_code == 2 and coordinate_result is not None:
             if coordinate_result["blister_exhausted"]:
-                self._run_callback(self.on_blister_exhausted)
                 self._clear_active_schedule()
             else:
                 with self._state_lock:
@@ -525,6 +622,36 @@ class UartService:
         self._clear_active_schedule()
 
     def _handle_device_error(self, request_id, error_code):
+        home_return = get_home_return_by_request(request_id)
+        if (
+            home_return is not None
+            and home_return["home_timeout_ack_at"] is None
+        ):
+            mark_home_return_error(
+                home_return["id"],
+                request_id,
+                self._format_time(datetime.now()),
+                f"AT_{error_code}",
+            )
+            self._set_error(
+                "AT가 원점 복귀를 거부했습니다: "
+                f"request_id={request_id}, error={error_code}"
+            )
+            self._last_home_move_transmit_at = None
+            self._last_home_timeout_transmit_at = None
+            return
+
+        timeout_schedule = get_timeout_schedule_by_request(request_id)
+        if (
+            timeout_schedule is not None
+            and timeout_schedule["timeout_ack_at"] is None
+        ):
+            self._set_error(
+                f"AT가 TIMEOUT을 거부했습니다: request_id={request_id}, "
+                f"error={error_code}"
+            )
+            return
+
         schedule = self._get_active_schedule()
         if schedule is None:
             return
@@ -541,6 +668,17 @@ class UartService:
         )
         self._run_callback(self.on_alert_stop)
         self._clear_active_schedule()
+
+    def _retry_last_transmission(self):
+        payload = self._last_transmitted_payload
+        if payload is None:
+            self._set_error(
+                "AT INVALID_FORMAT: 재전송할 마지막 UART 프레임이 없습니다."
+            )
+            return
+
+        self._set_error("AT INVALID_FORMAT: 마지막 UART 프레임 재전송")
+        self._write(payload)
 
     def _handle_legacy(self, parsed):
         schedule = self._get_active_schedule()
@@ -579,8 +717,22 @@ class UartService:
             return
         self._last_schedule_check_at = current_monotonic
 
+        home_return = get_pending_home_return()
+        if home_return is not None:
+            if home_return["home_ready_at"] is not None:
+                self._transmit_home_timeout(home_return)
+            elif home_return["home_move_ack_at"] is None:
+                self._transmit_home_move(home_return)
+            return
+
         if not self._system_time_is_ready():
             return
+
+        pending_timeout = get_pending_timeout()
+        if pending_timeout is not None:
+            self._transmit_timeout(pending_timeout)
+            return
+
         if get_unacknowledged_result() is not None:
             return
 
@@ -631,7 +783,13 @@ class UartService:
 
     def _expire_active_schedule(self, schedule, event_time):
         if schedule["status"] == "READY_TO_DISPENSE":
-            mark_missed(schedule["id"], event_time, "DOSE_BUTTON_TIMEOUT")
+            expired = mark_missed_and_queue_timeout(
+                schedule["id"],
+                event_time,
+                "DOSE_BUTTON_TIMEOUT",
+            )
+            if expired is not None:
+                self._transmit_timeout(expired, force=True)
         elif schedule["status"] == "MOVING":
             error_code = (
                 "MOVE_ACK_TIMEOUT"
@@ -676,6 +834,46 @@ class UartService:
             )
             self._last_dispense_transmit_at = time.monotonic()
 
+    def _transmit_home_move(self, schedule, force=False):
+        if not self._transmit_due(self._last_home_move_transmit_at, force):
+            return
+        payload = build_move_command(
+            schedule["home_request_id"],
+            0,
+            0,
+            HOME_RETURN_ALLOWED_SECONDS,
+        )
+        if self._write(payload):
+            record_home_move_sent(
+                schedule["id"],
+                self._format_time(datetime.now()),
+            )
+            self._last_home_move_transmit_at = time.monotonic()
+
+    def _transmit_home_timeout(self, schedule, force=False):
+        if not self._transmit_due(
+            self._last_home_timeout_transmit_at,
+            force,
+        ):
+            return
+        payload = build_timeout_command(schedule["home_request_id"])
+        if self._write(payload):
+            record_home_timeout_sent(
+                schedule["id"],
+                self._format_time(datetime.now()),
+            )
+            self._last_home_timeout_transmit_at = time.monotonic()
+
+    def _transmit_timeout(self, schedule, force=False):
+        if not self._transmit_due(self._last_timeout_transmit_at, force):
+            return
+        payload = build_timeout_command(schedule["move_request_id"])
+        if self._write(payload):
+            record_timeout_sent(
+                schedule["id"], self._format_time(datetime.now())
+            )
+            self._last_timeout_transmit_at = time.monotonic()
+
     def _transmit_due(self, last_transmit_at, force):
         if self._serial is None:
             return False
@@ -690,6 +888,7 @@ class UartService:
             with self._serial_lock:
                 self._serial.write(payload)
                 self._serial.flush()
+                self._last_transmitted_payload = bytes(payload)
             print(f"[UART] Pi → AT: {payload.decode('ascii').strip()!r}")
             return True
         except (OSError, serial.SerialException) as error:

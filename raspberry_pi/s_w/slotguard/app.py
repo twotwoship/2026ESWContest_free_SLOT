@@ -34,6 +34,7 @@ from database import (
     create_schedule,
     delete_schedule,
     get_active_schedule,
+    get_blocking_home_return,
     get_current_coordinate,
     get_device_settings,
     get_device_state,
@@ -753,6 +754,7 @@ def serialize_schedule(schedule):
         "x": schedule["x_coordinate"],
         "y": schedule["y_coordinate"],
         "error_code": schedule["error_code"],
+        "home_error_code": schedule["home_error_code"],
         "completed_at": schedule["completed_at"],
     }
 
@@ -770,7 +772,19 @@ def seconds_until_deadline(schedule, now):
     return max(0, int((deadline - now).total_seconds()))
 
 
-def display_screen_state(now, active, blocking_result, latest_result, state):
+def display_screen_state(
+    now,
+    active,
+    blocking_result,
+    latest_result,
+    state,
+    home_return=None,
+):
+    if home_return is not None:
+        if home_return["home_error_code"] is not None:
+            return "RETURN_HOME_ERROR", home_return
+        return "RETURNING_HOME", home_return
+
     if (
         blocking_result is not None
         and blocking_result["error_code"] == "EMPTY_BLISTER_SLOT"
@@ -784,6 +798,9 @@ def display_screen_state(now, active, blocking_result, latest_result, state):
 
     if active is not None:
         return active["status"], active
+
+    if state["blister_exhausted"]:
+        return "BLISTER_EMPTY", None
 
     if latest_result and latest_result["status"] in {
         "DISPENSED",
@@ -801,9 +818,6 @@ def display_screen_state(now, active, blocking_result, latest_result, state):
     if not is_system_time_configured():
         return "TIME_REQUIRED", None
 
-    if state["blister_exhausted"]:
-        return "BLISTER_EMPTY", None
-
     return "HOME", None
 
 
@@ -812,6 +826,7 @@ def build_display_status():
     active = get_active_schedule()
     blocking_result = get_unacknowledged_result()
     latest_result = get_latest_result()
+    home_return = get_blocking_home_return()
     next_schedule = get_next_schedule()
     device_state = get_device_state()
     screen, screen_schedule = display_screen_state(
@@ -820,9 +835,12 @@ def build_display_status():
         blocking_result,
         latest_result,
         device_state,
+        home_return,
     )
     target = screen_schedule or active
-    if target is None or target["x_coordinate"] is None:
+    if screen in {"RETURNING_HOME", "RETURN_HOME_ERROR"}:
+        target_coordinate = {"x": 0, "y": 0}
+    elif target is None or target["x_coordinate"] is None:
         target_coordinate = {
             "x": device_state["current_x"],
             "y": device_state["current_y"],
