@@ -54,4 +54,3 @@ Team Name : 약속(藥SLOT)은 지켜야제
   ```
   git commit -m "atmega128a_uart.c"
   ```
-* 모든 코드파일에는 맨 위에 이 파일이 어떤 역할 및 기능을 수행하는지 서술
