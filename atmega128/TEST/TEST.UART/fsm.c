@@ -20,7 +20,6 @@ void FSM_HandleDispense(const DispenseCmd_t *cmd)
     // TODO: g_persist_state.move_state == READY && 좌표 일치 확인,
     //       EEPROM_SaveState로 ACCEPTED 기록 후 ACK, 이후 DISPENSING 전이
     Send_ACK(cmd->req_id, "DISPENSE");
-	Send_RESULT(cmd->req_id, 0, 0, 1);
 	Send_RESULT(cmd->req_id, cmd->x,  cmd->y, 1);
 }
 
