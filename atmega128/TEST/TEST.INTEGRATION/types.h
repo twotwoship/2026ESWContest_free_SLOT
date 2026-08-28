@@ -42,6 +42,30 @@ typedef enum {
 	STATE_RECOVERY_REQUIRED
 } SystemState;
 
+/* 파싱된 명령 종류 */
+typedef enum {
+    CMD_NONE = 0,
+    CMD_MOVE,
+    CMD_DISPENSE,
+    CMD_ACK,
+    CMD_TIMEOUT,
+    CMD_UNKNOWN
+} CmdType;
+
+/* ERROR 프레임의 [CODE] 필드 */
+typedef enum {
+    ERR_INVALID_FORMAT = 0,
+    ERR_INVALID_COORD,
+    ERR_INVALID_TIME,
+    ERR_ID_CONFLICT,
+    ERR_BUSY,
+    ERR_NOT_READY,
+    ERR_COORD_MISMATCH,
+    ERR_RECOVERY_REQUIRED,
+    ERR_STEPPER_ERROR,
+    ERR_SERVO_ERROR,
+    ERR_SENSOR_ERROR
+} ErrorCode;
 
 /** X/Y축 식별. AXIS_COUNT 는 배열 크기용 */
 typedef enum {
@@ -103,5 +127,39 @@ typedef enum {
 	HOMING_MANUAL_WAIT,  /**< 수동 복구: 코일 해제, 사람이 밀기 대기 */
 	HOMING_DONE
 } HomingStatus;
+
+typedef struct {
+    CmdType   cmd;
+    uint32_t  req_id;
+    uint8_t   x;
+    uint8_t   y;
+    uint32_t  allow_time_sec;
+    char      ack_target[12];
+    bool      valid;
+} Frame;
+
+typedef struct {
+    uint32_t  req_id;
+    uint8_t   x;
+    uint8_t   y;
+    uint32_t  allow_time_sec;
+    bool      seen;
+} LastCmdRecord;
+
+typedef struct {
+    SystemState     state;
+    uint8_t         cur_x;
+    uint8_t         cur_y;
+    uint32_t        active_req_id;
+    uint8_t         pending_x;
+    uint8_t         pending_y;
+    LastCmdRecord   last_move;
+    LastCmdRecord   last_dispense;
+    DispenseResult  cached_result;
+    uint32_t        result_req_id;
+    uint8_t         result_retx_count;
+    uint32_t        result_retx_tick_ms;
+    bool            boot_suppress_error;
+} SystemCtx;
 
 #endif /* TYPES_H */
