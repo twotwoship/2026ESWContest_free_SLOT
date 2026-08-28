@@ -1,4 +1,4 @@
-# PROJECT : 약속(藥 SLOT)은 지켜야제
+# PROJECT : 약속(藥 SLOT)은 지켜야지
 
 Team Name : 약SLOT
 
