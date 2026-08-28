@@ -1,156 +1,208 @@
 /*
- * ATmega128A 초음파(HC-SR04) 거리 측정 + UART 출력
- * ------------------------------------------------
- * TRIG : PD4 (출력)
- * ECHO : PD2 (INT2, 외부 인터럽트로 상승/하강 엣지 캡처)
+ * sg255_test.c
+ * ATmega128A - Kodenshi SG-255 투과형 포토인터럽터 테스트 코드
  *
- * 측정 원리
- * 1) TRIG에 10us HIGH 펄스 인가 -> 센서가 40kHz 초음파 8펄스 발사
- * 2) 센서가 반사파를 받으면 ECHO 핀을 HIGH로 올리고, 반사파 수신 시 LOW로 내림
- *    -> ECHO가 HIGH인 시간(pulse width)이 왕복 시간
- * 3) INT2 엣지 인터럽트에서 상승엣지 때 TCNT1=0으로 리셋,
- *    하강엣지 때 TCNT1 값을 캡처하여 pulse width(타이머 틱 수)를 구함
- * 4) 거리(cm) = 시간(us) / 58   (음속 340m/s 기준 왕복 보정)
+ * 핀맵:
+ *   PD0 (INT0) - 홈 센서 X축 (SG255 #1 OUT)
+ *   PD1 (INT1) - 홈 센서 Y축 (SG255 #2 OUT)
  *
- * Timer1: 분주비 8, F_CPU=16MHz -> 1틱 = 0.5us, 최대 32.768ms 측정 가능
- *         (HC-SR04 최대 유효거리 4m 왕복 약 23ms 이므로 충분)
+ * SG255 회로:
+ *   LED측: VCC --[220ohm]-- Anode | Cathode -- GND
+ *   TR측:  VCC --[4.7kohm]-- Collector(=OUT, MCU 핀 연결)
+ *                              Emitter -- GND
+ *
+ * 극성:
+ *   빔 클리어 -> 포토TR 도통 -> OUT = LOW
+ *   빔 차단   -> 포토TR 차단 -> OUT = HIGH
+ *
+ * => 감지 이벤트 = Rising Edge (LOW -> HIGH)
+ *
+ * UART0: 9600bps, 8N1
  */
 
 #define F_CPU 16000000UL
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <util/delay.h>
 #include <stdio.h>
-#include <stdlib.h>
 
-/* ------------------- UART0 (9600bps, 8N1) ------------------- */
 #define BAUD 9600
-#define UBRR_VALUE ((F_CPU / 16 / BAUD) - 1)
+#define UBRR_VALUE ((F_CPU / (16UL * BAUD)) - 1)
 
-void UART0_init(void)
+/* ---------------- 홈 센서 핀 정의 ---------------- */
+
+/* X축 홈 센서 */
+#define IR1_PORT  PIND
+#define IR1_PIN   PD0
+
+/* Y축 홈 센서 */
+#define IR2_PORT  PIND
+#define IR2_PIN   PD1
+
+/* SG255 극성: 감지(차단) = HIGH */
+#define IR_BLOCKED_STATE 1
+
+volatile uint8_t ir1_isr_flag = 0;
+volatile uint8_t ir2_isr_flag = 0;
+
+static uint8_t ir1_prev_state = 0;
+static uint8_t ir2_prev_state = 0;
+
+
+/* ---------------- UART0 ---------------- */
+
+static void uart0_init(void)
 {
-    UBRR0H = (unsigned char)(UBRR_VALUE >> 8);
-    UBRR0L = (unsigned char)UBRR_VALUE;
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0);      // 송수신 Enable 
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);    // 8N1 
+    UBRR0H = (uint8_t)(UBRR_VALUE >> 8);
+    UBRR0L = (uint8_t)(UBRR_VALUE & 0xFF);
+
+    UCSR0B = (1 << TXEN0);
+
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
-void UART0_transmit(unsigned char data)
+static void uart0_putc(char c)
 {
-    while (!(UCSR0A & (1 << UDRE0)));  // 송신 버퍼 비었는지 대기
-    UDR0 = data;
+    while (!(UCSR0A & (1 << UDRE0)));
+
+    UDR0 = c;
 }
 
-void UART0_print(const char *str)
+static void uart0_puts(const char *s)
 {
-    while (*str) {
-        UART0_transmit((unsigned char)*str++);
+    while (*s) {
+        uart0_putc(*s++);
     }
 }
 
-/* ------------------- 초음파(ECHO) 캡처 관련 전역변수 ------------------- */
-volatile uint8_t  echo_edge_state = 0;   // 0: 상승엣지 대기, 1: 하강엣지 대기
-volatile uint16_t echo_ticks      = 0;   // 캡처된 타이머 틱 값 
-volatile uint8_t  echo_done       = 0;   // 측정 완료 플래그 
-volatile uint8_t  timer1_ovf      = 0;   // Timer1 오버플로우(타임아웃) 플래그 
 
-/* ------------------- INT2 (PD2, ECHO) 초기화 ------------------- */
-void ECHO_INT2_init(void)
+/* ---------------- IR 센서 초기화 ---------------- */
+
+static void ir_sensors_init(void)
 {
-    DDRD  &= ~(1 << PD2);   // PD2 입력 (ECHO) 
+    /*
+     * PD0 = INT0 = X축 홈 센서
+     * PD1 = INT1 = Y축 홈 센서
+     *
+     * 외부 풀업 저항을 사용하므로
+     * 내부 풀업은 사용하지 않음.
+     */
 
-    /* EICRA: INT2 sense control (ISC21:ISC20)
-     * 11 = 상승엣지, 10 = 하강엣지 */
-    EICRA |= (1 << ISC21) | (1 << ISC20);  // 처음엔 상승엣지 대기
+    DDRD &= ~((1 << PD0) | (1 << PD1));
 
-    EIMSK |= (1 << INT2);   // INT2 인터럽트 Enable
+    PORTD &= ~((1 << PD0) | (1 << PD1));
+
+
+    /*
+     * EICRA
+     *
+     * INT0:
+     * ISC01 = 0
+     * ISC00 = 1
+     * -> Any Logical Change
+     *
+     * INT1:
+     * ISC11 = 0
+     * ISC10 = 1
+     * -> Any Logical Change
+     */
+
+    EICRA &= ~((1 << ISC01) | (1 << ISC11));
+
+    EICRA |= (1 << ISC00) | (1 << ISC10);
+
+
+    /* INT0, INT1 인터럽트 활성화 */
+
+    EIMSK |= (1 << INT0) | (1 << INT1);
+
+    sei();
 }
 
-/* ------------------- TRIG (PD4) 초기화 ------------------- */
-void TRIG_init(void)
+
+/* ---------------- ISR ---------------- */
+
+ISR(INT0_vect)
 {
-    DDRD  |= (1 << PD4);    // PD4 출력 (TRIG)
-    PORTD &= ~(1 << PD4);   // 초기 LOW 
+    ir1_isr_flag = 1;
 }
 
-/* ------------------- Timer1 초기화 (거리 측정용 자유 카운터) ------------------- */
-void Timer1_init(void)
+ISR(INT1_vect)
 {
-    TCCR1A = 0x00;
-    TCCR1B = (1 << CS11);   // 분주비 8 -> 0.5us/tick @16MHz 
-    TIMSK  |= (1 << TOIE1); // Timer1 오버플로우 인터럽트 Enable (타임아웃 검출용)
+    ir2_isr_flag = 1;
 }
 
-/* ------------------- ISR: ECHO 엣지 캡처 ------------------- */
-ISR(INT2_vect)
-{
-    if (echo_edge_state == 0) {
-        // 상승엣지 감지: 타이머 리셋 후 하강엣지 대기로 전환
-        TCNT1 = 0;
-        timer1_ovf = 0;
-        echo_edge_state = 1;
-        EICRA = (EICRA & ~(1 << ISC20)) | (1 << ISC21); // 10: 하강엣지
-    } else {
-        // 하강엣지 감지: 펄스폭(타이머 값) 캡처
-        echo_ticks = TCNT1;
-        echo_done  = 1;
-        echo_edge_state = 0;
-        EICRA |= (1 << ISC21) | (1 << ISC20);            // 11: 상승엣지로 복귀
-    }
-}
 
-/* ------------------- ISR: Timer1 오버플로우 (타임아웃/무반사) ------------------- */
-ISR(TIMER1_OVF_vect)
-{
-    timer1_ovf = 1;
-}
-
-/* ------------------- TRIG 펄스 발생 (10us) ------------------- */
-void trigger_pulse(void)
-{
-    PORTD |= (1 << PD4);
-    _delay_us(10);
-    PORTD &= ~(1 << PD4);
-}
+/* ---------------- 메인 ---------------- */
 
 int main(void)
 {
-    char buf[40];
-    uint32_t time_us;
-    uint32_t distance_cm;
+    uart0_init();
+    ir_sensors_init();
 
-    UART0_init();
-    TRIG_init();
-    ECHO_INT2_init();
-    Timer1_init();
-    sei();
+    uart0_puts("SG255 HOME sensor test start\r\n");
+    uart0_puts("X = PD0(INT0), Y = PD1(INT1)\r\n");
+    uart0_puts("polarity: BLOCKED = HIGH\r\n");
 
-    UART0_print("Ultrasonic Distance Test Start\r\n");
 
-    while (1) {
-        echo_done  = 0;
-        timer1_ovf = 0;
-        echo_edge_state = 0;
-        EICRA |= (1 << ISC21) | (1 << ISC20);  
+    while (1)
+    {
+        /* ---------------- X축 홈 센서 ---------------- */
 
-        trigger_pulse();
+        if (ir1_isr_flag)
+        {
+            ir1_isr_flag = 0;
 
-        while (!echo_done && !timer1_ovf) {
-            ; 
+            uint8_t cur =
+                (IR1_PORT & (1 << IR1_PIN)) ? 1 : 0;
+
+
+            if (ir1_prev_state != IR_BLOCKED_STATE &&
+                cur == IR_BLOCKED_STATE)
+            {
+                uart0_puts(
+                    "X HOME: BLOCKED (rising edge)\r\n"
+                );
+            }
+            else if (ir1_prev_state == IR_BLOCKED_STATE &&
+                     cur != IR_BLOCKED_STATE)
+            {
+                uart0_puts(
+                    "X HOME: CLEARED (falling edge)\r\n"
+                );
+            }
+
+            ir1_prev_state = cur;
         }
 
-        if (echo_done) {
-            /* 거리(cm) 계산: time_us = ticks * 0.5us, distance = time_us/58 */
-            time_us     = (uint32_t)echo_ticks / 2;   /* 0.5us 단위 -> us 환산 */
-            distance_cm = time_us / 58;
 
-            sprintf(buf, "Distance: %lu cm (%lu us)\r\n", distance_cm, time_us);
-            UART0_print(buf);
-        } else {
-            UART0_print("Distance: Out of range (timeout)\r\n");
+        /* ---------------- Y축 홈 센서 ---------------- */
+
+        if (ir2_isr_flag)
+        {
+            ir2_isr_flag = 0;
+
+            uint8_t cur =
+                (IR2_PORT & (1 << IR2_PIN)) ? 1 : 0;
+
+
+            if (ir2_prev_state != IR_BLOCKED_STATE &&
+                cur == IR_BLOCKED_STATE)
+            {
+                uart0_puts(
+                    "Y HOME: BLOCKED (rising edge)\r\n"
+                );
+            }
+            else if (ir2_prev_state == IR_BLOCKED_STATE &&
+                     cur != IR_BLOCKED_STATE)
+            {
+                uart0_puts(
+                    "Y HOME: CLEARED (falling edge)\r\n"
+                );
+            }
+
+            ir2_prev_state = cur;
         }
-
-        _delay_ms(60);  /* HC-SR04 권장 트리거 간격(60ms 이상) 확보 */
     }
 
     return 0;
