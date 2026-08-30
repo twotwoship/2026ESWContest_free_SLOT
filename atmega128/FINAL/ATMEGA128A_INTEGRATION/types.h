@@ -49,6 +49,7 @@ typedef enum {
     CMD_DISPENSE,
     CMD_ACK,
     CMD_TIMEOUT,
+	CMD_RST,	//reset 추가
     CMD_UNKNOWN
 } CmdType;
 

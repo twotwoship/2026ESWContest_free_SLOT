@@ -20,6 +20,7 @@ static void Fsm_HandleMove(const Frame *f);
 static void Fsm_HandleDispense(const Frame *f);
 static void Fsm_HandleTimeout(const Frame *f);
 static void Fsm_HandleAck(const Frame *f);
+static void Fsm_HandleRst(const Frame *f); //reset 추가
 static void Fsm_ServiceResultRetx(void);
 
 //FSM 초기화
@@ -114,6 +115,10 @@ void Fsm_HandleFrame(const Frame *f)
     case CMD_ACK:
         Fsm_HandleAck(f);
         break;
+		
+	case CMD_RST:
+		Fsm_HandleRst(f);
+		break;
 
     default:
         break;
@@ -256,6 +261,22 @@ static void Fsm_HandleAck(const Frame *f)
     //RESULT가 정상적으로 수신되면 IDLE 상태로 전환
     Fsm_SetState(STATE_IDLE);
 }
+
+//Reset 처리 - 상태와 무관하게 항상 수락 - ID_CONFLICT, 중복판정도 제외
+static void Fsm_HandleRst(const Frame *f)
+{
+	if(g_ctx.state == STATE_DISPENSING) {
+		Dispense_Abort(); //서보 복귀 시작 + y축 정지
+	}
+	Stepper_ReleaseAll(); //두 축 모두 정지
+	
+	Protocol_SendAck(f->req_id, TOK_RST);
+	
+	memset(&g_ctx, 0, sizeof(g_ctx)); //컨텍스트 전체 초기화
+	Fsm_SetState(STATE_RECOVERY_REQUIRED);
+	Homing_Start();
+}
+
 
 //RESULT 재전송 처리 - 재전송 주기가 지났는지 확인하고, RESULT를 10초 주기로 최대 6회까지 재전송
 //(6회를 넘어서면 강제로 STATE_IDLE로 전이)

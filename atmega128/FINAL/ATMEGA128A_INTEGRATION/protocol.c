@@ -204,6 +204,24 @@ bool Protocol_Parse(const char *line, Frame *out)
         return true;
     }
 
+    //************RST|<REQ_ID>**************
+    //즉시 초기화 - TIMEOUT과 동일하게 req_id만 가짐
+    if (strcmp(fields[0], TOK_RST) == 0) {
+        uint32_t req_id;
+
+        if (nfields != 2) return false; //필드 개수 확인
+
+        //<REQ_ID>
+        if (Protocol_ParseHex32(fields[1], &req_id) != REQ_ID_HEX_LEN) return false;
+        if (fields[1][REQ_ID_HEX_LEN] != '\0') return false;
+        if (req_id == REQ_ID_NONE) return false;
+
+        out->cmd    = CMD_RST;
+        out->req_id = req_id;
+        out->valid  = true; //검증 성공
+        return true;
+    }
+
     return false; //나머지는 정의되지 않은 명령어
 }
 

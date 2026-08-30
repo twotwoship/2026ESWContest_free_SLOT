@@ -52,6 +52,7 @@
 #define TOK_DISPENSE                "DISPENSE"
 #define TOK_ACK                     "ACK"
 #define TOK_TIMEOUT                 "TIMEOUT"
+#define TOK_RST						"RST"	//강제 초기화
 
 /* 송신 응답 토큰 */
 #define TOK_WAIT                    "WAIT"
