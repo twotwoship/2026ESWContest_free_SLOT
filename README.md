@@ -54,5 +54,5 @@ Team Name : 약SLOT
 ## Commit 규칙
 * commit message: code 제목
   ```
-  git commit -m "atmega128a_uart.c"
+  git commit -m "atmega128a_uart"
   ```
