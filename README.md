@@ -13,8 +13,8 @@
 
 | Branch | 설명 | 담당 |
 | --- | --- | --- |
-| atme | [atmega128a](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/atme) | 이양배 |
-| rpi_sw | [라즈베리파이](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/rpi_sw) | 신유지, 이호윤 |
+| atme | [atmega128a](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/atme) | 신유지, 이호윤 |
+| rpi_sw | [라즈베리파이](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/rpi_sw) | 이양배 |
 
 
 ## Contributors
