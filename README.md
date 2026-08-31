@@ -9,6 +9,14 @@
 
 - [시연 영상](https://youtu.be/20yo6nAbsLM)
 
+## Code
+
+| Branch | 설명 |
+| --- | --- |
+| atme | [atmega128a](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/atme) |
+| rpi_sw | [라즈베리파이](https://github.com/twotwoship/2026ESWContest_free_SLOT/tree/rpi_sw) |
+
+
 ## Contributors
 
 | 이름 | GitHub | 담당 |
@@ -186,7 +194,37 @@ LCD에서는 일정 등록이나 삭제를 수행하지 않고 복약 확인과 
 ## 프로젝트 구조
 
 ```text
-yak_slot/
+2026ESWContest_free_SLOT/
+├── atmega128/
+│   ├── README.md
+│   │
+│   ├── FINAL/
+│   │   ├── FINAL.atsln
+│   │   └── ATMEGA128A_INTEGRATION/
+│   │       ├── main.c
+│   │       ├── config.h
+│   │       ├── types.h
+│   │       │
+│   │       ├── uart.c
+│   │       ├── uart.h
+│   │       ├── protocol.c
+│   │       ├── protocol.h
+│   │       ├── fsm.c
+│   │       ├── fsm.h
+│   │       │
+│   │       ├── stepper.c
+│   │       ├── stepper.h
+│   │       ├── homing.c
+│   │       ├── homing.h
+│   │       ├── servo.c
+│   │       ├── servo.h
+│   │       ├── sensors.c
+│   │       ├── sensors.h
+│   │       ├── dispense.c
+│   │       ├── dispense.h
+│   │       ├── systick.c
+│   │       ├── systick.h
+│
 └── raspberry_pi/
     └── s_w/
         └── slotguard/
@@ -195,23 +233,61 @@ yak_slot/
             ├── uart_service.py
             ├── system_time_service.py
             ├── requirements.txt
+            │
             ├── templates/
+            │   ├── dashboard.html
+            │   ├── display.html
+            │   └── schedules.html
+            │
             ├── static/
+            │   ├── display.css
+            │   ├── display.js
+            │   ├── style.css
+            │   └── audio/
+            │
             ├── audio/
+            │   ├── medicine_time.mp3
+            │   ├── blister_empty.mp3
+            │   ├── empty_slot_confirm.mp3
+            │   └── empty_slot_next.mp3
+            │
             └── system/
+                ├── install_slotguard.sh
+                ├── install_slotguard_ap.sh
+                ├── install_network_helper.sh
+                └── install_waveshare4_lcd.sh
 ```
+
+### ATmega128A Firmware
+
+| 파일 | 역할 |
+| --- | --- |
+| `main.c` | 메인 |
+| `config.h` | CPU 주파수, 핀, UART, 모터, 서보, 센서 및 타이밍 설정 |
+| `types.h` | 시스템 상태, 명령 종류, 오류 코드, 프레임 등 공용 자료형 |
+| `uart.c`, `uart.h` | USART0 초기화와 RX/TX 링버퍼 기반 논블로킹 통신 |
+| `protocol.c`, `protocol.h` | UART 프레임 파싱과 ACK·WAIT·RESULT·ERROR 응답 생성 |
+| `fsm.c`, `fsm.h` | 명령 처리, 상태 전이, Request ID 검증, 중복 구동 차단 |
+| `stepper.c`, `stepper.h` | 28BYJ-48 X/Y 스테핑모터와 2×5 슬롯 좌표 이동 |
+| `homing.c`, `homing.h` | SG255 센서를 이용한 X/Y축 원점 탐색 및 복구 |
+| `servo.c`, `servo.h` | MG996R 압출 서보의 PWM과 압출·복귀 동작 |
+| `sensors.c`, `sensors.h` | SEN0503 IR 센서와 SG255 원점 센서 처리 |
+| `dispense.c`, `dispense.h` | Y축 보정 이동, 서보 압출, IR 감지를 포함한 배출 시퀀스 |
+| `systick.c`, `systick.h` | 논블로킹 동작을 위한 1ms 시스템 Tick 제공 |
+
+### Raspberry Pi Application
 
 | 파일 및 디렉터리 | 역할 |
 | --- | --- |
-| `app.py` | Flask Web, LCD API, 인증, 음성 및 전원 기능 |
-| `database.py` | SQLite 스키마, 일정, 좌표, 상태 전이, 결과 저장 |
-| `uart_service.py` | UART 송수신, ACK/WAIT/RESULT 처리, 재전송 |
+| `app.py` | Flask 관리자 Web, LCD API, 인증, 음성 및 전원 기능 |
+| `database.py` | SQLite 스키마, 복약 일정, 슬롯 좌표와 상태 전이 관리 |
+| `uart_service.py` | ATmega128A 명령 송신, 응답 처리, 재전송 및 통신 상태 관리 |
 | `system_time_service.py` | 스마트폰 기반 시스템 시간 동기화 |
-| `templates/` | 관리자 Web 및 LCD HTML |
-| `static/` | CSS, JavaScript, 버튼 효과음 |
-| `audio/` | 복약 안내 음성 |
-| `system/` | systemd, LCD, AP 및 권한 설치 도구 |
-
+| `templates/` | 관리자 Web과 장치 LCD 화면 |
+| `static/` | CSS, JavaScript와 버튼 효과음 |
+| `audio/` | 복약 및 블리스터 상태 안내 음성 |
+| `system/` | systemd, LCD, AP, 네트워크, 시간 및 권한 설치 도구 |
+| `requirements.txt` | Raspberry Pi Python 의존성 |
 
 ## 구현 검증
 
