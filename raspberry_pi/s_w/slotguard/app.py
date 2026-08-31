@@ -74,7 +74,7 @@ NETWORK_HELPER_PATH = Path(
 )
 NETWORK_MODES = {"operation", "development"}
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
-APP_VERSION = "0.3.6"
+APP_VERSION = "0.1.0"
 
 
 def load_auth_config():
