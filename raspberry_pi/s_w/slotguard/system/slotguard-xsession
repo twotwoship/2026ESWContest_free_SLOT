@@ -41,9 +41,14 @@ until /usr/bin/curl --silent --fail --max-time 2 \
     sleep 1
 done
 
+# The fbdev Xorg screen has no usable EGL configuration.  Raspberry Pi
+# Chromium otherwise retries GPU initialization and can terminate the first
+# kiosk session, leaving the LCD blank until LightDM respawns it.
 exec /usr/bin/chromium \
     --kiosk \
     --app=http://127.0.0.1:5000/display \
+    --disable-gpu \
+    --disable-gpu-compositing \
     --user-data-dir="$HOME/.config/slotguard-chromium" \
     --lang=ko-KR \
     --password-store=basic \

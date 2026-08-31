@@ -9,10 +9,12 @@ from unittest.mock import patch
 import app
 import database
 import system_time_service
+from system import slotguard_network_helper
 from uart_service import (
     UartService,
     build_dispense_command,
     build_move_command,
+    build_reset_command,
     build_result_ack,
     build_timeout_command,
     parse_protocol_message,
@@ -108,6 +110,8 @@ class SlotguardTestCase(unittest.TestCase):
     def move_to_dispensing(self, service=None):
         service, schedule_id, schedule = self.move_to_ready(service)
         schedule = service.request_dispense(schedule_id)
+        service._last_schedule_check_at = 0
+        service._process_schedules()
         return service, schedule_id, schedule
 
     def finish_home_return(self, service, schedule_id):
@@ -145,11 +149,23 @@ class SlotguardTestCase(unittest.TestCase):
             b"TIMEOUT|00000001\n",
         )
         self.assertEqual(
+            build_reset_command("00000010"),
+            b"RESET|00000010\n",
+        )
+        self.assertEqual(
             parse_protocol_message("ACK|00000001|TIMEOUT"),
             {
                 "type": "ACK",
                 "request_id": "00000001",
                 "action": "TIMEOUT",
+            },
+        )
+        self.assertEqual(
+            parse_protocol_message("ACK|00000010|RESET"),
+            {
+                "type": "ACK",
+                "request_id": "00000010",
+                "action": "RESET",
             },
         )
         self.assertEqual(parse_result_message("141"), (1, 4, 1))
@@ -186,6 +202,87 @@ class SlotguardTestCase(unittest.TestCase):
                 "가" * 31,
                 3600,
             )
+
+    def test_system_reset_retries_and_deletes_only_after_matching_ack(self):
+        self.set_coordinate(0, 2)
+        service, schedule_id, schedule = self.start_move()
+        move_request_id = schedule["move_request_id"]
+
+        reset_state = service.request_system_reset()
+        reset_request_id = reset_state["request_id"]
+        reset_payload = build_reset_command(reset_request_id)
+        self.assertIsNotNone(database.get_schedule(schedule_id))
+        self.assertEqual(database.get_current_coordinate(), (0, 2))
+        self.assertEqual(database.get_system_reset_state()["state"], "PENDING")
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        self.assertEqual(service._serial.writes[-1], reset_payload)
+
+        service._handle_message(f"WAIT|{move_request_id}")
+        self.assertEqual(database.get_schedule(schedule_id)["status"], "MOVING")
+
+        service._last_schedule_check_at = 0
+        service._last_reset_transmit_at = (
+            time.monotonic() - service.ack_retry_seconds
+        )
+        service._process_schedules()
+        self.assertEqual(service._serial.writes.count(reset_payload), 2)
+
+        service._handle_message(f"ACK|{reset_request_id}|RESET")
+        self.assertEqual(database.get_schedules(), [])
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(
+            database.get_system_reset_state()["state"],
+            "COMPLETED",
+        )
+        self.assertIsNone(service.get_status()["active_schedule_id"])
+
+        service._handle_message(f"ACK|{reset_request_id}|RESET")
+        self.assertEqual(database.get_schedules(), [])
+
+    def test_system_reset_error_blocks_commands_until_new_reset_request(self):
+        service, schedule_id, _ = self.start_move()
+        first_reset = service.request_system_reset()
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        writes_before_error = list(service._serial.writes)
+
+        service._handle_message(
+            f"ERROR|{first_reset['request_id']}|RESET_FAILED"
+        )
+        self.assertEqual(database.get_system_reset_state()["state"], "ERROR")
+        self.assertIsNotNone(database.get_schedule(schedule_id))
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        self.assertEqual(service._serial.writes, writes_before_error)
+
+        second_reset = service.request_system_reset()
+        self.assertNotEqual(
+            second_reset["request_id"],
+            first_reset["request_id"],
+        )
+        self.assertEqual(second_reset["state"], "PENDING")
+
+    def test_schedule_reset_route_waits_for_at_ack(self):
+        schedule_id = self.create_schedule()
+        service = self.make_service()
+        client = app.app.test_client()
+        with client.session_transaction() as session_state:
+            session_state["logged_in"] = True
+            session_state["last_activity"] = app.current_timestamp()
+
+        with (
+            patch.object(app, "auth_configured", return_value=True),
+            patch.object(app, "uart_service", service),
+        ):
+            response = client.post("/schedules/reset")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("reset=pending", response.location)
+        self.assertIsNotNone(database.get_schedule(schedule_id))
+        self.assertEqual(database.get_system_reset_state()["state"], "PENDING")
 
     def test_move_wait_dispense_result_flow_uses_two_request_ids(self):
         service, schedule_id, schedule = self.move_to_dispensing()
@@ -232,6 +329,29 @@ class SlotguardTestCase(unittest.TestCase):
         service._process_schedules()
         self.assertEqual(service._serial.writes, [first_payload, first_payload])
         self.assertIsNotNone(database.get_schedule(schedule_id)["move_ack_at"])
+
+    def test_request_dispense_leaves_uart_send_to_background_loop(self):
+        service, schedule_id, _ = self.move_to_ready()
+        move_writes = list(service._serial.writes)
+
+        schedule = service.request_dispense(schedule_id)
+
+        self.assertEqual(schedule["status"], "DISPENSING")
+        self.assertEqual(service._serial.writes, move_writes)
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        dispense_payload = build_dispense_command(
+            schedule["dispense_request_id"],
+            schedule["x_coordinate"],
+            schedule["y_coordinate"],
+        )
+        self.assertEqual(service._serial.writes[-1], dispense_payload)
+        self.assertEqual(service._serial.writes.count(dispense_payload), 1)
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        self.assertEqual(service._serial.writes.count(dispense_payload), 1)
 
     def test_dispense_retry_reuses_request_id_until_ack(self):
         service, schedule_id, schedule = self.move_to_dispensing()
@@ -340,6 +460,7 @@ class SlotguardTestCase(unittest.TestCase):
         service._handle_message(
             f"RESULT|{schedule['dispense_request_id']}|002"
         )
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
         retry = database.get_schedule(schedule_id)
         service._handle_message(f"WAIT|{retry['move_request_id']}")
         retry = service.request_dispense(schedule_id)
@@ -359,6 +480,17 @@ class SlotguardTestCase(unittest.TestCase):
             f"RESULT|{first_attempt['dispense_request_id']}|002"
         )
         service._handle_message(first_result)
+
+        confirmation = database.get_schedule(schedule_id)
+        self.assertEqual(confirmation["status"], "EMPTY_SLOT_CONFIRM")
+        self.assertEqual(confirmation["error_code"], "EMPTY_SLOT_CONFIRM")
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(
+            service._serial.writes[-1],
+            b"ACK|00000002|RESULT\n",
+        )
+
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
 
         first_retry = database.get_schedule(schedule_id)
         self.assertEqual(first_retry["status"], "MOVING")
@@ -406,14 +538,19 @@ class SlotguardTestCase(unittest.TestCase):
 
         service._handle_message("WAIT|00000003")
         second_attempt = service.request_dispense(schedule_id)
+        service._last_schedule_check_at = 0
+        service._process_schedules()
         self.assertEqual(second_attempt["dispense_request_id"], "00000004")
         service._handle_message("RESULT|00000004|012")
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
 
         second_retry = database.get_schedule(schedule_id)
         self.assertEqual(second_retry["move_request_id"], "00000005")
         self.assertEqual(database.get_current_coordinate(), (0, 2))
         service._handle_message("WAIT|00000005")
         final_attempt = service.request_dispense(schedule_id)
+        service._last_schedule_check_at = 0
+        service._process_schedules()
         self.assertEqual(final_attempt["dispense_request_id"], "00000006")
         service._handle_message("RESULT|00000006|021")
 
@@ -430,6 +567,94 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertEqual(
             {event["detail"] for event in empty_events},
             {"00", "01"},
+        )
+
+    def test_empty_result_waits_for_user_and_does_not_repeat_voice(self):
+        confirmations = []
+        advances = []
+        service = self.make_service(
+            on_empty_slot_confirmation=lambda: confirmations.append(True),
+            on_empty_slot_advance=lambda: advances.append(True),
+        )
+        service, schedule_id, attempt = self.move_to_dispensing(service)
+        result_message = f"RESULT|{attempt['dispense_request_id']}|002"
+        writes_before_result = list(service._serial.writes)
+
+        service._handle_message(result_message)
+
+        pending = database.get_schedule(schedule_id)
+        self.assertEqual(pending["status"], "EMPTY_SLOT_CONFIRM")
+        self.assertEqual(app.build_display_status()["screen"], "EMPTY_SLOT_CONFIRM")
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+        self.assertEqual(confirmations, [True])
+        self.assertEqual(advances, [])
+        with self.assertRaises(database.ActiveDoseError):
+            database.reset_blister(self.now_seconds())
+        self.assertEqual(
+            service._serial.writes,
+            writes_before_result
+            + [build_result_ack(attempt["dispense_request_id"])],
+        )
+
+        service._handle_message(result_message)
+        self.assertEqual(confirmations, [True])
+        self.assertEqual(database.get_current_coordinate(), (0, 0))
+
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
+        self.assertEqual(advances, [True])
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertEqual(database.get_schedule(schedule_id)["status"], "MOVING")
+
+    def test_empty_slot_dispensed_choice_completes_without_second_pill(self):
+        service, schedule_id, attempt = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{attempt['dispense_request_id']}|002"
+        )
+        writes_before_choice = list(service._serial.writes)
+
+        with patch.object(app, "uart_service", service):
+            response = app.app.test_client().post(
+                "/api/display/empty-slot-choice",
+                json={"schedule_id": schedule_id, "choice": "dispensed"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        completed = database.get_schedule(schedule_id)
+        self.assertEqual(completed["status"], "DISPENSED")
+        self.assertIsNone(completed["error_code"])
+        self.assertEqual(database.get_current_coordinate(), (0, 1))
+        self.assertEqual(service._serial.writes, writes_before_choice)
+        dispensed_events = [
+            event
+            for event in database.get_event_log()
+            if event["event_type"] == "DISPENSED"
+        ]
+        self.assertEqual(
+            dispensed_events[-1]["detail"],
+            "USER_CONFIRMED_AFTER_EMPTY_RESULT",
+        )
+
+    def test_last_empty_result_confirmed_dispensed_returns_home(self):
+        self.set_coordinate(1, 0)
+        service, schedule_id, attempt = self.move_to_dispensing()
+        service._handle_message(
+            f"RESULT|{attempt['dispense_request_id']}|102"
+        )
+
+        completed = service.resolve_empty_slot_confirmation(
+            schedule_id,
+            "dispensed",
+        )
+
+        self.assertEqual(completed["status"], "DISPENSED")
+        self.assertTrue(database.get_device_state()["blister_exhausted"])
+        self.assertIsNotNone(completed["home_request_id"])
+        self.assertEqual(
+            service._serial.writes[-1],
+            f"MOVE|{completed['home_request_id']}|0|0|000030\n".encode(
+                "ascii"
+            ),
         )
 
     def test_duplicate_result_is_acknowledged_without_double_advance(self):
@@ -468,6 +693,43 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertEqual(schedule["error_code"], "DOSE_WINDOW_EXPIRED")
         self.assertIsNone(schedule["timeout_requested_at"])
         self.assertEqual(service._serial.writes, [])
+
+    def test_missed_result_does_not_block_the_next_schedule(self):
+        old_time = (datetime.now() - timedelta(minutes=2)).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        missed_id = self.create_schedule(old_time, 60)
+        next_id = self.create_schedule(self.now_minute(), 3600)
+        service = self.make_service()
+
+        service._process_schedules()
+        missed = database.get_schedule(missed_id)
+        self.assertEqual(missed["status"], "MISSED")
+        self.assertIsNone(missed["acknowledged_at"])
+        self.assertIsNone(database.get_unacknowledged_result())
+
+        service._last_schedule_check_at = 0
+        service._process_schedules()
+        self.assertEqual(database.get_schedule(next_id)["status"], "MOVING")
+        self.assertTrue(service._serial.writes[-1].startswith(b"MOVE|"))
+
+    def test_missed_screen_automatically_hides_after_five_seconds(self):
+        schedule_id = self.create_schedule()
+        database.mark_missed(schedule_id, self.now_seconds())
+        self.assertEqual(app.build_display_status()["screen"], "MISSED")
+
+        completed_at = (datetime.now() - timedelta(seconds=6)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        conn = database.connect_db()
+        conn.execute(
+            "UPDATE schedules SET completed_at = ? WHERE id = ?",
+            (completed_at, schedule_id),
+        )
+        conn.commit()
+        conn.close()
+
+        self.assertNotEqual(app.build_display_status()["screen"], "MISSED")
 
     def test_ready_timeout_is_persisted_retried_and_acknowledged(self):
         service, schedule_id, schedule = self.move_to_ready()
@@ -692,6 +954,7 @@ class SlotguardTestCase(unittest.TestCase):
         service._handle_message(
             f"RESULT|{attempt['dispense_request_id']}|102"
         )
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
 
         empty = database.get_schedule(schedule_id)
         self.assertEqual(empty["status"], "FAILED")
@@ -733,6 +996,7 @@ class SlotguardTestCase(unittest.TestCase):
         service._handle_message(
             f"RESULT|{attempt['dispense_request_id']}|102"
         )
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
         self.finish_home_return(service, schedule_id)
         database.reset_blister(self.now_seconds())
 
@@ -776,6 +1040,7 @@ class SlotguardTestCase(unittest.TestCase):
         service._handle_message(
             f"RESULT|{attempt['dispense_request_id']}|102"
         )
+        service.resolve_empty_slot_confirmation(schedule_id, "empty")
         self.finish_home_return(service, schedule_id)
         database.reset_blister(self.now_seconds())
         writes_before_resume = list(service._serial.writes)
@@ -809,12 +1074,39 @@ class SlotguardTestCase(unittest.TestCase):
         )
         self.assertIn("수동복약", javascript)
         self.assertIn("수동미복약", javascript)
+        self.assertIn("약 배출이 확인되지 않았습니다", javascript)
+        self.assertIn("약이 나왔음", javascript)
+        self.assertIn("약이 나오지 않음", javascript)
         self.assertIn("lcd-empty-choice-actions", javascript)
         self.assertIn(
             "grid-template-columns: repeat(2, minmax(0, 1fr));",
             stylesheet,
         )
         self.assertIn("font-size: clamp(30px, 7vw, 42px);", stylesheet)
+
+    def test_display_has_button_sound_and_two_stage_idle_screen(self):
+        base_dir = Path(__file__).resolve().parents[1]
+        template = (base_dir / "templates" / "display.html").read_text(
+            encoding="utf-8"
+        )
+        javascript = (base_dir / "static" / "display.js").read_text(
+            encoding="utf-8"
+        )
+        stylesheet = (base_dir / "static" / "display.css").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("button-soft-tap.wav", template)
+        self.assertIn("lcd-screensaver", template)
+        self.assertEqual(template.count("lcd-screensaver-brand"), 2)
+        self.assertIn("lcd-blank-screen", template)
+        self.assertIn("5 * 60 * 1000", javascript)
+        self.assertIn("10 * 60 * 1000", javascript)
+        self.assertIn("workflowScreens.has(latestStatus.screen)", javascript)
+        self.assertIn("playButtonSound", javascript)
+        self.assertIn("gap: 100vw;", stylesheet)
+        self.assertIn("translate(calc(-50% - 50vw), -50%)", stylesheet)
+        self.assertIn("@keyframes lcd-marquee", stylesheet)
 
     def test_blister_reset_is_blocked_during_active_dose(self):
         service, _, _ = self.start_move()
@@ -862,6 +1154,126 @@ class SlotguardTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(database.get_device_settings()["voice_repeat"], 3)
         self.assertEqual(database.get_device_settings()["volume_step"], 3)
+
+    def test_network_mode_api_is_lcd_only_and_switches_known_modes(self):
+        client = app.app.test_client()
+
+        with patch.object(app, "run_network_helper") as helper:
+            response = client.get(
+                "/api/display/network-mode",
+                environ_base={"REMOTE_ADDR": "192.168.0.20"},
+            )
+            self.assertEqual(response.status_code, 403)
+            helper.assert_not_called()
+
+        with patch.object(
+            app,
+            "run_network_helper",
+            return_value="development",
+        ) as helper:
+            response = client.get(
+                "/api/display/network-mode",
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["mode"], "development")
+            helper.assert_called_once_with("status")
+
+        with (
+            patch.object(app, "get_active_schedule", return_value=None),
+            patch.object(app, "get_blocking_home_return", return_value=None),
+            patch.object(
+                app,
+                "run_network_helper",
+                return_value="operation",
+            ) as helper,
+        ):
+            response = client.post(
+                "/api/display/network-mode",
+                json={"mode": "operation"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["mode"], "operation")
+            helper.assert_called_once_with("operation")
+
+        response = client.post(
+            "/api/display/network-mode",
+            json={"mode": "arbitrary-command"},
+            environ_base={"REMOTE_ADDR": "127.0.0.1"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_network_mode_switch_is_blocked_during_active_dose(self):
+        client = app.app.test_client()
+        with (
+            patch.object(app, "get_active_schedule", return_value={"id": 1}),
+            patch.object(app, "run_network_helper") as helper,
+        ):
+            response = client.post(
+                "/api/display/network-mode",
+                json={"mode": "development"},
+                environ_base={"REMOTE_ADDR": "127.0.0.1"},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.get_json()["error"], "NETWORK_MODE_LOCKED")
+        helper.assert_not_called()
+
+    def test_network_mode_control_uses_hidden_five_second_hold(self):
+        display_script = (
+            app.BASE_DIR / "static" / "display.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"network-status-row"', display_script)
+        self.assertIn("networkRevealActive", display_script)
+        self.assertIn("}, 5000);", display_script)
+        self.assertNotIn("개발 모드</button>", display_script)
+
+    def test_ap_installer_makes_operation_the_boot_default(self):
+        installer = (
+            app.BASE_DIR / "system" / "install_slotguard_ap.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("connection.autoconnect yes", installer)
+        self.assertIn(
+            'connection modify "$development_connection"',
+            installer,
+        )
+        self.assertIn("connection.autoconnect no", installer)
+
+    def test_network_helper_runner_rejects_unknown_actions_and_bad_output(self):
+        helper_path = Path(self.temp_dir.name) / "slotguard-network"
+        helper_path.write_text("#!/bin/sh\n", encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            app.run_network_helper("unsupported")
+
+        completed = app.subprocess.CompletedProcess(
+            [str(helper_path), "status"],
+            0,
+            stdout="operation\n",
+            stderr="",
+        )
+        with (
+            patch.object(app, "NETWORK_HELPER_PATH", helper_path),
+            patch.object(app.os, "geteuid", return_value=0),
+            patch.object(app.subprocess, "run", return_value=completed) as run,
+        ):
+            self.assertEqual(app.run_network_helper("status"), "operation")
+            run.assert_called_once_with(
+                [str(helper_path), "status"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+
+        completed.stdout = "unexpected\n"
+        with (
+            patch.object(app, "NETWORK_HELPER_PATH", helper_path),
+            patch.object(app.os, "geteuid", return_value=0),
+            patch.object(app.subprocess, "run", return_value=completed),
+            self.assertRaises(RuntimeError),
+        ):
+            app.run_network_helper("status")
 
     def test_legacy_volume_labels_migrate_to_numeric_steps(self):
         database.DB_PATH.unlink()
@@ -1063,7 +1475,7 @@ class SlotguardTestCase(unittest.TestCase):
             (1, 1),
         )
         conn = database.connect_db()
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 10)
         conn.close()
 
         database.reset_blister(self.now_seconds())
@@ -1076,6 +1488,81 @@ class SlotguardTestCase(unittest.TestCase):
             database.advance_coordinate(self.now_seconds())["current"],
             (1, 4),
         )
+
+
+class NetworkHelperTestCase(unittest.TestCase):
+    def setUp(self):
+        self.config = {
+            "interface": "wlan0",
+            "operation_connection": "slotguard-ap",
+            "development_connection": "PC hotspot",
+        }
+
+    @staticmethod
+    def nmcli_result(returncode=0, stdout="", stderr=""):
+        return app.subprocess.CompletedProcess(
+            ["nmcli"],
+            returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def test_network_mode_maps_only_configured_connections(self):
+        with patch.object(
+            slotguard_network_helper,
+            "run_nmcli",
+            return_value=self.nmcli_result(stdout="slotguard-ap\n"),
+        ):
+            self.assertEqual(
+                slotguard_network_helper.network_mode(self.config),
+                "operation",
+            )
+
+        with patch.object(
+            slotguard_network_helper,
+            "run_nmcli",
+            return_value=self.nmcli_result(stdout="another-network\n"),
+        ):
+            self.assertEqual(
+                slotguard_network_helper.network_mode(self.config),
+                "unavailable",
+            )
+
+    def test_development_failure_restores_operation_connection(self):
+        with patch.object(
+            slotguard_network_helper,
+            "run_nmcli",
+            side_effect=[
+                self.nmcli_result(returncode=1, stderr="hotspot unavailable"),
+                self.nmcli_result(),
+            ],
+        ) as run:
+            with self.assertRaises(slotguard_network_helper.NetworkHelperError):
+                slotguard_network_helper.switch_mode(
+                    self.config,
+                    "development",
+                )
+
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("PC hotspot", run.call_args_list[0].args[0])
+        self.assertIn("slotguard-ap", run.call_args_list[1].args[0])
+
+    def test_successful_development_switch_is_verified(self):
+        with patch.object(
+            slotguard_network_helper,
+            "run_nmcli",
+            side_effect=[
+                self.nmcli_result(),
+                self.nmcli_result(stdout="PC hotspot\n"),
+            ],
+        ):
+            self.assertEqual(
+                slotguard_network_helper.switch_mode(
+                    self.config,
+                    "development",
+                ),
+                "development",
+            )
 
 
 if __name__ == "__main__":

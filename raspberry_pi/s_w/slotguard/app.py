@@ -23,7 +23,6 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database import (
-    ACK_REQUIRED_STATUSES,
     ActiveDoseError,
     DuplicateScheduleError,
     MAX_ALLOWED_SECONDS,
@@ -43,11 +42,11 @@ from database import (
     get_recent_records,
     get_schedule,
     get_schedules,
+    get_system_reset_state,
     get_unacknowledged_result,
     get_used_coordinates,
     init_db,
     reset_blister,
-    reset_schedules_and_position,
     update_device_settings,
 )
 from system_time_service import (
@@ -67,8 +66,15 @@ POWER_HELPER_PATH = Path(
         "/usr/local/sbin/slotguard-power",
     )
 )
+NETWORK_HELPER_PATH = Path(
+    os.environ.get(
+        "SLOTGUARD_NETWORK_HELPER",
+        "/usr/local/sbin/slotguard-network",
+    )
+)
+NETWORK_MODES = {"operation", "development"}
 SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.6"
 
 
 def load_auth_config():
@@ -119,6 +125,16 @@ BLISTER_EMPTY_VOICE_FILE = (
     BASE_DIR
     / "audio"
     / "blister_empty.mp3"
+)
+EMPTY_SLOT_CONFIRM_VOICE_FILE = (
+    BASE_DIR
+    / "audio"
+    / "empty_slot_confirm.mp3"
+)
+EMPTY_SLOT_NEXT_VOICE_FILE = (
+    BASE_DIR
+    / "audio"
+    / "empty_slot_next.mp3"
 )
 
 AUTH_PAGE_TEMPLATE = """
@@ -268,12 +284,61 @@ def play_voice(voice_file, description, volume_step=5):
         )
 
 
+class OneShotVoicePlayer:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._process = None
+        self._generation = 0
+
+    def play(self, voice_file, description, volume_step=5):
+        with self._lock:
+            self._generation += 1
+            generation = self._generation
+            previous_process = self._process
+            self._process = None
+        if previous_process is not None and previous_process.poll() is None:
+            previous_process.terminate()
+
+        threading.Thread(
+            target=self._run,
+            args=(generation, voice_file, description, volume_step),
+            daemon=True,
+        ).start()
+
+    def _run(self, generation, voice_file, description, volume_step):
+        if not voice_file.is_file():
+            print(f"[VOICE] 음성 파일을 찾을 수 없습니다: {voice_file}")
+            return
+        if int(volume_step) == 0:
+            return
+
+        try:
+            process = subprocess.Popen(
+                voice_command(voice_file, volume_step),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as error:
+            print(f"[VOICE] {description} 재생 실패: {error}")
+            return
+
+        with self._lock:
+            stale = generation != self._generation
+            if not stale:
+                self._process = process
+        if stale:
+            process.terminate()
+        process.wait()
+        with self._lock:
+            if self._process is process:
+                self._process = None
+
+
+one_shot_voice_player = OneShotVoicePlayer()
+
+
 def play_voice_async(voice_file, description, volume_step=5):
-    threading.Thread(
-        target=play_voice,
-        args=(voice_file, description, volume_step),
-        daemon=True,
-    ).start()
+    one_shot_voice_player.play(voice_file, description, volume_step)
 
 
 class VoiceAlertManager:
@@ -370,12 +435,36 @@ def play_blister_empty_voice():
     )
 
 
+def play_empty_slot_confirmation_voice():
+    settings = get_device_settings()
+    if settings["voice_repeat"] == 0:
+        return
+    play_voice_async(
+        EMPTY_SLOT_CONFIRM_VOICE_FILE,
+        "약 배출 확인 안내",
+        settings["volume_step"],
+    )
+
+
+def play_empty_slot_next_voice():
+    settings = get_device_settings()
+    if settings["voice_repeat"] == 0:
+        return
+    play_voice_async(
+        EMPTY_SLOT_NEXT_VOICE_FILE,
+        "다음 슬롯 이동 안내",
+        settings["volume_step"],
+    )
+
+
 voice_alert_manager = VoiceAlertManager()
 
 
 uart_service = UartService(
     on_schedule_started=voice_alert_manager.start,
     on_alert_stop=voice_alert_manager.stop,
+    on_empty_slot_confirmation=play_empty_slot_confirmation_voice,
+    on_empty_slot_advance=play_empty_slot_next_voice,
     on_blister_exhausted=play_blister_empty_voice,
     is_time_ready=is_system_time_configured,
 )
@@ -534,6 +623,7 @@ def dashboard():
     current_x, current_y = get_current_coordinate()
     uart_status = uart_service.get_status()
     system_time_status = get_system_time_status()
+    reset_status = get_system_reset_state()
 
     counts = {
         "total": len(schedules),
@@ -548,7 +638,12 @@ def dashboard():
 
         if status == "SCHEDULED":
             counts["waiting"] += 1
-        elif status in {"MOVING", "READY_TO_DISPENSE", "DISPENSING"}:
+        elif status in {
+            "MOVING",
+            "READY_TO_DISPENSE",
+            "DISPENSING",
+            "EMPTY_SLOT_CONFIRM",
+        }:
             counts["allowed"] += 1
         elif status in {"DISPENSED", "MANUALLY_COMPLETED"}:
             counts["dispensed"] += 1
@@ -561,6 +656,7 @@ def dashboard():
         current_coordinate=f"{current_x}{current_y}",
         uart_status=uart_status["uart"],
         system_time_status=system_time_status,
+        reset_status=reset_status,
     )
 
 
@@ -645,12 +741,9 @@ def delete_schedule_item(schedule_id):
 @app.post("/schedules/reset")
 @login_required
 def reset_schedules():
-    reset_schedules_and_position(
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    )
-    uart_service.reset_runtime_state()
+    uart_service.request_system_reset()
 
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard", reset="pending"))
 
 
 @app.get("/api/status")
@@ -669,6 +762,7 @@ def api_status():
     current_x, current_y = get_current_coordinate()
     uart_status = uart_service.get_status()
     system_time_status = get_system_time_status()
+    reset_status = get_system_reset_state()
     response = {
         "web": "OK",
         "database": "OK",
@@ -681,6 +775,7 @@ def api_status():
         "current_coordinate": f"{current_x}{current_y}",
         "schedule_count": len(schedules),
         "system_time": system_time_status,
+        "reset": reset_status,
     }
 
     return jsonify(response)
@@ -805,6 +900,7 @@ def display_screen_state(
     if latest_result and latest_result["status"] in {
         "DISPENSED",
         "MANUALLY_COMPLETED",
+        "MISSED",
     }:
         completed_at = latest_result["completed_at"]
         if completed_at:
@@ -953,6 +1049,39 @@ def api_display_manual_complete():
     return jsonify({"ok": True, "blister_exhausted": result["blister_exhausted"]})
 
 
+@app.post("/api/display/empty-slot-choice")
+@display_local_only
+def api_display_empty_slot_choice():
+    data = request.get_json(silent=True) or {}
+    try:
+        schedule_id = int(data.get("schedule_id"))
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "INVALID_SCHEDULE",
+            "message": "올바른 복약 기록이 아닙니다.",
+        }), 400
+
+    choice = data.get("choice")
+    if choice not in {"dispensed", "empty"}:
+        return jsonify({
+            "error": "INVALID_CHOICE",
+            "message": "약이 나왔는지 확인해 주세요.",
+        }), 400
+
+    try:
+        schedule = uart_service.resolve_empty_slot_confirmation(
+            schedule_id,
+            choice,
+        )
+    except (ValueError, ActiveDoseError) as error:
+        return jsonify({
+            "error": "EMPTY_SLOT_CHOICE_NOT_ALLOWED",
+            "message": str(error),
+        }), 409
+
+    return jsonify({"ok": True, "schedule": serialize_schedule(schedule)})
+
+
 @app.post("/api/display/empty-blister-choice")
 @display_local_only
 def api_display_empty_blister_choice():
@@ -1076,6 +1205,82 @@ def run_power_action(action):
             (result.stderr or result.stdout).strip()
             or "전원 동작을 실행하지 못했습니다."
         )
+
+
+def run_network_helper(action):
+    if action not in {"status", *NETWORK_MODES}:
+        raise ValueError("지원하지 않는 네트워크 동작입니다.")
+    if not NETWORK_HELPER_PATH.is_file():
+        raise RuntimeError("네트워크 전환 도우미가 설치되지 않았습니다.")
+
+    command = [str(NETWORK_HELPER_PATH), action]
+    if os.geteuid() != 0:
+        command = ["/usr/bin/sudo", "-n", *command]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=55 if action in NETWORK_MODES else 5,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            (result.stderr or result.stdout).strip()
+            or "네트워크 동작을 실행하지 못했습니다."
+        )
+
+    output_lines = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+    mode = output_lines[-1] if output_lines else ""
+    if mode not in {*NETWORK_MODES, "unavailable"}:
+        raise RuntimeError("네트워크 도우미가 올바르지 않은 상태를 반환했습니다.")
+    return mode
+
+
+@app.get("/api/display/network-mode")
+@display_local_only
+def api_display_network_mode():
+    try:
+        mode = run_network_helper("status")
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return jsonify({
+            "error": "NETWORK_MODE_UNAVAILABLE",
+            "message": str(error),
+        }), 503
+    return jsonify({"mode": mode})
+
+
+@app.post("/api/display/network-mode")
+@display_local_only
+def api_display_set_network_mode():
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode")
+    if mode not in NETWORK_MODES:
+        return jsonify({
+            "error": "INVALID_NETWORK_MODE",
+            "message": "운영 모드 또는 개발 모드만 선택할 수 있습니다.",
+        }), 400
+
+    if (
+        get_active_schedule() is not None
+        or get_blocking_home_return() is not None
+    ):
+        return jsonify({
+            "error": "NETWORK_MODE_LOCKED",
+            "message": "약 이동·배출이 끝난 뒤 네트워크 모드를 변경해 주세요.",
+        }), 409
+
+    try:
+        active_mode = run_network_helper(mode)
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return jsonify({
+            "error": "NETWORK_MODE_SWITCH_FAILED",
+            "message": str(error),
+        }), 503
+    return jsonify({"ok": True, "mode": active_mode})
 
 
 @app.post("/api/display/power")

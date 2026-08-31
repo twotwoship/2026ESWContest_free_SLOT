@@ -9,15 +9,19 @@ from database import (
     ActiveDoseError,
     MAX_ALLOWED_SECONDS,
     assign_coordinate,
+    complete_empty_slot_confirmed_dispensed,
     complete_home_return,
     complete_dispensed,
+    complete_system_reset,
     continue_after_empty_slot,
     get_active_schedule,
+    get_blocking_system_reset,
     get_current_coordinate,
     get_device_state,
     get_due_schedule,
     get_home_return_by_request,
     get_pending_home_return,
+    get_pending_system_reset,
     get_pending_timeout,
     get_schedule,
     get_schedule_by_dispense_request,
@@ -34,15 +38,19 @@ from database import (
     mark_missed_and_queue_timeout,
     mark_move_ack,
     mark_ready,
+    mark_system_reset_error,
     mark_timeout_ack,
     prepare_dispense,
     prepare_home_return,
     prepare_move,
+    prepare_system_reset,
     record_dispense_sent,
     record_home_move_sent,
     record_home_timeout_sent,
     record_move_sent,
+    record_system_reset_sent,
     record_timeout_sent,
+    request_empty_slot_confirmation,
     resume_after_empty_blister,
 )
 
@@ -109,6 +117,11 @@ def build_timeout_command(request_id):
     return f"TIMEOUT|{request_id}\n".encode("ascii")
 
 
+def build_reset_command(request_id):
+    _validate_request_id(request_id)
+    return f"RESET|{request_id}\n".encode("ascii")
+
+
 def build_result_ack(request_id):
     _validate_request_id(request_id)
     return f"ACK|{request_id}|RESULT\n".encode("ascii")
@@ -131,7 +144,7 @@ def parse_protocol_message(message):
         request_id, action = parts[1], parts[2]
         if (
             REQUEST_ID_PATTERN.fullmatch(request_id)
-            and action in {"MOVE", "DISPENSE", "RESULT", "TIMEOUT"}
+            and action in {"MOVE", "DISPENSE", "RESULT", "TIMEOUT", "RESET"}
         ):
             return {
                 "type": "ACK",
@@ -187,6 +200,8 @@ class UartService:
         ack_retry_seconds=ACK_RETRY_SECONDS,
         on_schedule_started=None,
         on_alert_stop=None,
+        on_empty_slot_confirmation=None,
+        on_empty_slot_advance=None,
         on_blister_exhausted=None,
         is_time_ready=None,
     ):
@@ -195,6 +210,8 @@ class UartService:
         self.ack_retry_seconds = ack_retry_seconds
         self.on_schedule_started = on_schedule_started
         self.on_alert_stop = on_alert_stop
+        self.on_empty_slot_confirmation = on_empty_slot_confirmation
+        self.on_empty_slot_advance = on_empty_slot_advance
         self.on_blister_exhausted = on_blister_exhausted
         self.is_time_ready = is_time_ready
 
@@ -210,6 +227,7 @@ class UartService:
         self._last_timeout_transmit_at = None
         self._last_home_move_transmit_at = None
         self._last_home_timeout_transmit_at = None
+        self._last_reset_transmit_at = None
         self._next_reconnect_at = 0
         self._last_schedule_check_at = 0
         self._receive_buffer = bytearray()
@@ -249,7 +267,20 @@ class UartService:
             self._last_timeout_transmit_at = None
             self._last_home_move_transmit_at = None
             self._last_home_timeout_transmit_at = None
+            self._last_reset_transmit_at = None
             self._last_transmitted_payload = None
+            self._last_schedule_check_at = 0
+            self._last_message = None
+            self._last_error = None
+
+    def request_system_reset(self):
+        reset_state = prepare_system_reset(
+            self._format_time(datetime.now())
+        )
+        self._run_callback(self.on_alert_stop)
+        with self._state_lock:
+            self._last_reset_transmit_at = None
+        return reset_state
 
     def cancel_schedule(self, schedule_id):
         with self._state_lock:
@@ -261,6 +292,7 @@ class UartService:
             return True
 
     def request_dispense(self, schedule_id):
+        self._ensure_system_reset_not_blocking()
         schedule = get_schedule(schedule_id)
         if schedule is None or schedule["status"] != "READY_TO_DISPENSE":
             raise ValueError("약 배출 준비 상태가 아닙니다.")
@@ -283,10 +315,10 @@ class UartService:
             self._active_schedule_id = schedule_id
             self._last_dispense_transmit_at = None
         self._run_callback(self.on_alert_stop)
-        self._transmit_dispense(schedule, force=True)
         return get_schedule(schedule_id)
 
     def resume_empty_blister_dose(self, schedule_id):
+        self._ensure_system_reset_not_blocking()
         schedule = get_schedule(schedule_id)
         if (
             schedule is None
@@ -317,7 +349,59 @@ class UartService:
         self._transmit_move(schedule, force=True)
         return get_schedule(schedule_id)
 
+    def resolve_empty_slot_confirmation(self, schedule_id, choice):
+        self._ensure_system_reset_not_blocking()
+        schedule = get_schedule(schedule_id)
+        if schedule is None or schedule["status"] != "EMPTY_SLOT_CONFIRM":
+            raise ActiveDoseError("확인할 약 배출 기록이 없습니다.")
+
+        request_id = schedule["dispense_request_id"]
+        now = datetime.now()
+        event_time = self._format_time(now)
+        if choice == "dispensed":
+            coordinate_result = complete_empty_slot_confirmed_dispensed(
+                schedule_id,
+                request_id,
+                event_time,
+            )
+        elif choice == "empty":
+            coordinate_result = continue_after_empty_slot(
+                schedule_id,
+                request_id,
+                event_time,
+                self._remaining_seconds(schedule, now),
+            )
+        else:
+            raise ValueError("약 배출 여부를 올바르게 선택해 주세요.")
+
+        if coordinate_result is None:
+            raise ActiveDoseError("이미 처리된 약 배출 기록입니다.")
+
+        if coordinate_result["blister_exhausted"]:
+            home_return = prepare_home_return(schedule_id, event_time)
+            self._run_callback(self.on_alert_stop)
+            self._clear_active_schedule()
+            self._last_home_move_transmit_at = None
+            self._last_home_timeout_transmit_at = None
+            self._transmit_home_move(home_return, force=True)
+        elif choice == "empty":
+            with self._state_lock:
+                self._active_schedule_id = schedule_id
+                self._last_move_transmit_at = None
+                self._last_dispense_transmit_at = None
+            self._run_callback(self.on_empty_slot_advance)
+            self._transmit_move(
+                coordinate_result["schedule"],
+                force=True,
+            )
+        else:
+            self._run_callback(self.on_alert_stop)
+            self._clear_active_schedule()
+
+        return get_schedule(schedule_id)
+
     def get_status(self):
+        reset_state = get_blocking_system_reset()
         with self._state_lock:
             return {
                 "uart": self._connection_state,
@@ -327,6 +411,16 @@ class UartService:
                 "active_schedule_id": self._active_schedule_id,
                 "last_message": self._last_message,
                 "last_error": self._last_error,
+                "reset_request_id": (
+                    reset_state["request_id"]
+                    if reset_state is not None
+                    else None
+                ),
+                "reset_state": (
+                    reset_state["state"]
+                    if reset_state is not None
+                    else "IDLE"
+                ),
             }
 
     def _run(self):
@@ -424,6 +518,29 @@ class UartService:
             return
 
         message_type = parsed["type"]
+        blocking_reset = get_blocking_system_reset()
+        if blocking_reset is not None:
+            reset_request_id = blocking_reset["request_id"]
+            reset_response = (
+                message_type == "ACK"
+                and parsed["action"] == "RESET"
+                and parsed["request_id"] == reset_request_id
+            )
+            reset_error = (
+                message_type == "ERROR"
+                and parsed["request_id"] == reset_request_id
+            )
+            if not (
+                reset_response
+                or reset_error
+                or message_type == "INVALID_FORMAT"
+            ):
+                print(
+                    "[UART] RESET 처리 중 이전 메시지 무시: "
+                    f"{message!r}"
+                )
+                return
+
         if message_type == "ACK":
             self._handle_ack(parsed["request_id"], parsed["action"])
         elif message_type == "WAIT":
@@ -442,6 +559,21 @@ class UartService:
 
     def _handle_ack(self, request_id, action):
         event_time = self._format_time(datetime.now())
+
+        if action == "RESET":
+            blocking_reset = get_blocking_system_reset()
+            if (
+                blocking_reset is not None
+                and request_id != blocking_reset["request_id"]
+            ):
+                self._set_error(
+                    "RESET ACK 요청번호 불일치: "
+                    f"예상={blocking_reset['request_id']}, 수신={request_id}"
+                )
+                return
+            if complete_system_reset(request_id, event_time):
+                self.reset_runtime_state()
+            return
 
         home_return = get_home_return_by_request(request_id)
         if home_return is not None:
@@ -544,6 +676,23 @@ class UartService:
                 self._write(build_result_ack(request_id))
             return
 
+        if (
+            schedule["status"] == "EMPTY_SLOT_CONFIRM"
+            and request_id == schedule["dispense_request_id"]
+        ):
+            if (
+                result_code == 2
+                and (x_coordinate, y_coordinate)
+                == (schedule["x_coordinate"], schedule["y_coordinate"])
+            ):
+                self._write(build_result_ack(request_id))
+            else:
+                self._set_error(
+                    "빈 슬롯 확인 대기 중 RESULT 내용 불일치: "
+                    f"request_id={request_id}"
+                )
+            return
+
         if request_id != schedule["dispense_request_id"]:
             if is_result_request_processed(request_id):
                 self._write(build_result_ack(request_id))
@@ -586,17 +735,18 @@ class UartService:
                 "NO_DROP_DETECTED",
             )
         else:
-            remaining_seconds = self._remaining_seconds(schedule, now)
-            coordinate_result = continue_after_empty_slot(
+            confirmation = request_empty_slot_confirmation(
                 schedule["id"],
                 request_id,
                 event_time,
-                remaining_seconds,
             )
-            if coordinate_result and coordinate_result["blister_exhausted"]:
-                home_return = prepare_home_return(schedule["id"], event_time)
 
         self._write(build_result_ack(request_id))
+        if result_code == 2:
+            if confirmation is not None:
+                self._run_callback(self.on_empty_slot_confirmation)
+            return
+
         if home_return is not None:
             self._run_callback(self.on_alert_stop)
             self._clear_active_schedule()
@@ -605,23 +755,27 @@ class UartService:
             self._transmit_home_move(home_return, force=True)
             return
 
-        if result_code == 2 and coordinate_result is not None:
-            if coordinate_result["blister_exhausted"]:
-                self._clear_active_schedule()
-            else:
-                with self._state_lock:
-                    self._last_move_transmit_at = None
-                    self._last_dispense_transmit_at = None
-                self._transmit_move(
-                    coordinate_result["schedule"],
-                    force=True,
-                )
-            return
-
         self._run_callback(self.on_alert_stop)
         self._clear_active_schedule()
 
     def _handle_device_error(self, request_id, error_code):
+        pending_reset = get_pending_system_reset()
+        if (
+            pending_reset is not None
+            and request_id == pending_reset["request_id"]
+        ):
+            mark_system_reset_error(
+                request_id,
+                self._format_time(datetime.now()),
+                f"AT_{error_code}",
+            )
+            self._last_reset_transmit_at = None
+            self._set_error(
+                "AT가 RESET을 거부했습니다: "
+                f"request_id={request_id}, error={error_code}"
+            )
+            return
+
         home_return = get_home_return_by_request(request_id)
         if (
             home_return is not None
@@ -717,6 +871,12 @@ class UartService:
             return
         self._last_schedule_check_at = current_monotonic
 
+        blocking_reset = get_blocking_system_reset()
+        if blocking_reset is not None:
+            if blocking_reset["state"] == "PENDING":
+                self._transmit_reset(blocking_reset)
+            return
+
         home_return = get_pending_home_return()
         if home_return is not None:
             if home_return["home_ready_at"] is not None:
@@ -768,6 +928,9 @@ class UartService:
                     self._last_dispense_transmit_at = None
 
         if schedule is None:
+            return
+
+        if schedule["status"] == "EMPTY_SLOT_CONFIRM":
             return
 
         if now >= self._deadline_for(schedule):
@@ -874,6 +1037,17 @@ class UartService:
             )
             self._last_timeout_transmit_at = time.monotonic()
 
+    def _transmit_reset(self, reset_state, force=False):
+        if not self._transmit_due(self._last_reset_transmit_at, force):
+            return
+        payload = build_reset_command(reset_state["request_id"])
+        if self._write(payload):
+            record_system_reset_sent(
+                reset_state["request_id"],
+                self._format_time(datetime.now()),
+            )
+            self._last_reset_transmit_at = time.monotonic()
+
     def _transmit_due(self, last_transmit_at, force):
         if self._serial is None:
             return False
@@ -911,6 +1085,11 @@ class UartService:
             self._active_schedule_id = None
             self._last_move_transmit_at = None
             self._last_dispense_transmit_at = None
+
+    @staticmethod
+    def _ensure_system_reset_not_blocking():
+        if get_blocking_system_reset() is not None:
+            raise ActiveDoseError("일정 및 AT 초기화가 진행 중입니다.")
 
     @staticmethod
     def _deadline_for(schedule):

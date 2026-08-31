@@ -115,14 +115,37 @@
             </a>
 
             <form class="inline-form"
+                  id="schedule-reset-form"
                   method="post"
                   action="{{ url_for('reset_schedules') }}"
-                  onsubmit="return confirm('모든 일정을 초기화하겠습니까?');">
-                <button class="danger-button" type="submit">
+                  onsubmit="return confirm('AT 상태와 모든 일정을 초기화하겠습니까?');">
+                <button class="danger-button"
+                        id="schedule-reset-button"
+                        type="submit"
+                        {% if reset_status.state == 'PENDING' %}disabled{% endif %}>
                     일정 초기화
                 </button>
             </form>
         </div>
+
+        <p id="reset-status-message"
+           class="reset-status-message
+                  {% if reset_status.state == 'PENDING' %}pending{% endif %}
+                  {% if reset_status.state == 'ERROR' %}failure{% endif %}
+                  {% if reset_status.state == 'COMPLETED'
+                        and request.args.get('reset') == 'pending' %}success{% endif %}"
+           data-state="{{ reset_status.state }}"
+           role="status">
+            {% if reset_status.state == 'PENDING' %}
+                AT 초기화 응답을 기다리고 있습니다.
+                요청번호 {{ reset_status.request_id }}
+            {% elif reset_status.state == 'ERROR' %}
+                AT 초기화에 실패했습니다: {{ reset_status.error_code }}
+            {% elif reset_status.state == 'COMPLETED'
+                      and request.args.get('reset') == 'pending' %}
+                AT 상태와 모든 일정이 초기화되었습니다.
+            {% endif %}
+        </p>
     </main>
 
     <script>
@@ -131,6 +154,9 @@
         const settingMessage = document.getElementById(
             "time-setting-message"
         );
+        const resetButton = document.getElementById("schedule-reset-button");
+        const resetMessage = document.getElementById("reset-status-message");
+        let resetPollTimer = null;
 
         function formatPhoneTime() {
             phoneTime.textContent = new Date().toLocaleString(
@@ -201,6 +227,51 @@
                 setTimeButton.disabled = false;
             }
         });
+
+        async function pollResetStatus() {
+            try {
+                const response = await fetch(
+                    "{{ url_for('api_status') }}",
+                    {credentials: "same-origin", cache: "no-store"}
+                );
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error("초기화 상태를 확인하지 못했습니다.");
+                }
+
+                if (result.reset.state === "PENDING") {
+                    resetMessage.className = "reset-status-message pending";
+                    resetMessage.textContent = (
+                        `AT 초기화 응답을 기다리고 있습니다. 요청번호 ${result.reset.request_id}`
+                    );
+                    return;
+                }
+
+                window.clearInterval(resetPollTimer);
+                resetPollTimer = null;
+                if (result.reset.state === "COMPLETED") {
+                    resetMessage.className = "reset-status-message success";
+                    resetMessage.textContent = "AT 상태와 모든 일정이 초기화되었습니다.";
+                    window.setTimeout(() => {
+                        window.location.href = "{{ url_for('dashboard') }}";
+                    }, 800);
+                } else if (result.reset.state === "ERROR") {
+                    resetMessage.className = "reset-status-message failure";
+                    resetMessage.textContent = (
+                        `AT 초기화에 실패했습니다: ${result.reset.error_code}`
+                    );
+                    resetButton.disabled = false;
+                }
+            } catch (error) {
+                resetMessage.className = "reset-status-message failure";
+                resetMessage.textContent = error.message;
+            }
+        }
+
+        if (resetMessage.dataset.state === "PENDING") {
+            resetPollTimer = window.setInterval(pollResetStatus, 1000);
+            pollResetStatus();
+        }
     </script>
 </body>
 </html>

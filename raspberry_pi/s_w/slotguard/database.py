@@ -47,6 +47,7 @@ ACTIVE_STATUSES = {
     "MOVING",
     "READY_TO_DISPENSE",
     "DISPENSING",
+    "EMPTY_SLOT_CONFIRM",
 }
 TERMINAL_STATUSES = {
     "DISPENSED",
@@ -56,7 +57,7 @@ TERMINAL_STATUSES = {
     "COMM_ERROR",
 }
 SCHEDULE_STATUSES = {"SCHEDULED", *ACTIVE_STATUSES, *TERMINAL_STATUSES}
-ACK_REQUIRED_STATUSES = {"FAILED", "MISSED", "COMM_ERROR"}
+ACK_REQUIRED_STATUSES = {"FAILED", "COMM_ERROR"}
 
 SCHEDULE_COLUMNS = {
     "id",
@@ -145,6 +146,7 @@ def _create_schedules_table(conn):
                                       'MOVING',
                                       'READY_TO_DISPENSE',
                                       'DISPENSING',
+                                      'EMPTY_SLOT_CONFIRM',
                                       'DISPENSED',
                                       'FAILED',
                                       'MANUALLY_COMPLETED',
@@ -517,6 +519,10 @@ def init_db():
     conn = connect_db()
 
     try:
+        # Keep event_log foreign keys pointing at the rebuilt schedules table
+        # when a status CHECK constraint requires a table migration.
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")
         conn.execute("BEGIN IMMEDIATE")
         table_exists = conn.execute(
             """
@@ -533,7 +539,14 @@ def init_db():
                     "PRAGMA table_info(schedules)"
                 ).fetchall()
             }
-            if not SCHEDULE_COLUMNS.issubset(columns):
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'schedules'"
+            ).fetchone()["sql"]
+            if (
+                not SCHEDULE_COLUMNS.issubset(columns)
+                or "EMPTY_SLOT_CONFIRM" not in table_sql
+            ):
                 _migrate_schedules(conn)
         else:
             _create_schedules_table(conn)
@@ -593,6 +606,26 @@ def init_db():
 
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS system_reset_state (
+                singleton       INTEGER PRIMARY KEY CHECK(singleton = 1),
+                request_id      TEXT,
+                requested_at    TEXT,
+                sent_at         TEXT,
+                acknowledged_at TEXT,
+                completed_at    TEXT,
+                error_code      TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO system_reset_state (singleton)
+            VALUES (1)
+            """
+        )
+
+        conn.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_schedules_due
             ON schedules(status, scheduled_at, id)
             """
@@ -603,7 +636,7 @@ def init_db():
             ON event_log(created_at, id)
             """
         )
-        conn.execute("PRAGMA user_version = 8")
+        conn.execute("PRAGMA user_version = 10")
         conn.commit()
 
     except Exception:
@@ -611,6 +644,8 @@ def init_db():
         raise
 
     finally:
+        conn.execute("PRAGMA legacy_alter_table = OFF")
+        conn.execute("PRAGMA foreign_keys = ON")
         conn.close()
 
 
@@ -784,6 +819,7 @@ def is_result_request_processed(request_id):
             FROM event_log
             WHERE request_id = ?
               AND event_type IN (
+                  'EMPTY_SLOT_CONFIRM_REQUIRED',
                   'EMPTY_BLISTER_SLOT',
                   'DISPENSED',
                   'FAILED',
@@ -1416,6 +1452,63 @@ def complete_manual(schedule_id, event_time):
     )
 
 
+def request_empty_slot_confirmation(schedule_id, request_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            SCHEDULE_SELECT
+            + " WHERE id = ? AND status = 'DISPENSING' "
+            "AND dispense_request_id = ?",
+            (schedule_id, request_id),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return None
+
+        coordinate_detail = f"{row['x_coordinate']}{row['y_coordinate']}"
+        conn.execute(
+            """
+            UPDATE schedules
+            SET status = 'EMPTY_SLOT_CONFIRM',
+                result_at = COALESCE(result_at, ?),
+                error_code = 'EMPTY_SLOT_CONFIRM'
+            WHERE id = ?
+            """,
+            (event_time, schedule_id),
+        )
+        _insert_event(
+            conn,
+            schedule_id,
+            "EMPTY_SLOT_CONFIRM_REQUIRED",
+            event_time,
+            request_id=request_id,
+            detail=coordinate_detail,
+        )
+        conn.commit()
+        return get_schedule(schedule_id)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def complete_empty_slot_confirmed_dispensed(
+    schedule_id,
+    request_id,
+    event_time,
+):
+    return _complete_and_advance(
+        schedule_id,
+        request_id,
+        "DISPENSED",
+        event_time,
+        required_current_status="EMPTY_SLOT_CONFIRM",
+        event_detail="USER_CONFIRMED_AFTER_EMPTY_RESULT",
+    )
+
+
 def continue_after_empty_slot(
     schedule_id,
     request_id,
@@ -1433,7 +1526,7 @@ def continue_after_empty_slot(
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             SCHEDULE_SELECT
-            + " WHERE id = ? AND status = 'DISPENSING' "
+            + " WHERE id = ? AND status = 'EMPTY_SLOT_CONFIRM' "
             "AND dispense_request_id = ?",
             (schedule_id, request_id),
         ).fetchone()
@@ -1888,6 +1981,7 @@ def _complete_and_advance(
     event_time,
     required_current_status="DISPENSING",
     excluded_error_code=None,
+    event_detail=None,
 ):
     conn = connect_db()
     try:
@@ -1918,6 +2012,7 @@ def _complete_and_advance(
             status,
             event_time,
             request_id=request_id,
+            detail=event_detail,
         )
         conn.commit()
         return coordinate_result
@@ -2020,7 +2115,12 @@ def reset_blister(event_time):
         active = conn.execute(
             """
             SELECT id FROM schedules
-            WHERE status IN ('MOVING', 'READY_TO_DISPENSE', 'DISPENSING')
+            WHERE status IN (
+                'MOVING',
+                'READY_TO_DISPENSE',
+                'DISPENSING',
+                'EMPTY_SLOT_CONFIRM'
+            )
             LIMIT 1
             """
         ).fetchone()
@@ -2075,6 +2175,162 @@ def reset_blister(event_time):
             event_time,
         )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _reset_state_dict(row):
+    result = dict(row)
+    if result["request_id"] is None:
+        result["state"] = "IDLE"
+    elif result["completed_at"] is not None:
+        result["state"] = "COMPLETED"
+    elif result["error_code"] is not None:
+        result["state"] = "ERROR"
+    else:
+        result["state"] = "PENDING"
+    return result
+
+
+def get_system_reset_state():
+    conn = connect_db()
+    try:
+        row = conn.execute(
+            "SELECT request_id, requested_at, sent_at, acknowledged_at, "
+            "completed_at, error_code "
+            "FROM system_reset_state WHERE singleton = 1"
+        ).fetchone()
+        return _reset_state_dict(row)
+    finally:
+        conn.close()
+
+
+def get_pending_system_reset():
+    state = get_system_reset_state()
+    return state if state["state"] == "PENDING" else None
+
+
+def get_blocking_system_reset():
+    state = get_system_reset_state()
+    return state if state["state"] in {"PENDING", "ERROR"} else None
+
+
+def prepare_system_reset(event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT request_id, requested_at, sent_at, acknowledged_at, "
+            "completed_at, error_code "
+            "FROM system_reset_state WHERE singleton = 1"
+        ).fetchone()
+        state = _reset_state_dict(row)
+        if state["state"] == "PENDING":
+            conn.commit()
+            return state
+
+        request_id = allocate_request_id(conn)
+        conn.execute(
+            """
+            UPDATE system_reset_state
+            SET request_id = ?, requested_at = ?, sent_at = NULL,
+                acknowledged_at = NULL, completed_at = NULL,
+                error_code = NULL
+            WHERE singleton = 1
+            """,
+            (request_id, event_time),
+        )
+        conn.commit()
+        return get_system_reset_state()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def record_system_reset_sent(request_id, event_time):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE system_reset_state
+            SET sent_at = COALESCE(sent_at, ?)
+            WHERE singleton = 1 AND request_id = ?
+              AND completed_at IS NULL AND error_code IS NULL
+            """,
+            (event_time, request_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def mark_system_reset_error(request_id, event_time, error_code):
+    conn = connect_db()
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE system_reset_state
+            SET error_code = COALESCE(error_code, ?)
+            WHERE singleton = 1 AND request_id = ?
+              AND completed_at IS NULL
+            """,
+            (error_code, request_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def complete_system_reset(request_id, event_time):
+    conn = connect_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT request_id
+            FROM system_reset_state
+            WHERE singleton = 1 AND request_id = ?
+              AND completed_at IS NULL AND error_code IS NULL
+            """,
+            (request_id,),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return False
+
+        conn.execute("DELETE FROM schedules")
+        conn.execute(
+            "DELETE FROM sqlite_sequence "
+            "WHERE name IN ('schedules', 'event_log')"
+        )
+        conn.execute("DELETE FROM event_log")
+        conn.execute(
+            """
+            UPDATE device_state
+            SET current_x = 0, current_y = 0,
+                blister_exhausted = 0, coordinate_path_version = 2,
+                updated_at = ?
+            WHERE singleton = 1
+            """,
+            (event_time,),
+        )
+        conn.execute(
+            """
+            UPDATE system_reset_state
+            SET acknowledged_at = ?, completed_at = ?, error_code = NULL
+            WHERE singleton = 1 AND request_id = ?
+            """,
+            (event_time, event_time, request_id),
+        )
+        conn.commit()
+        return True
     except Exception:
         conn.rollback()
         raise

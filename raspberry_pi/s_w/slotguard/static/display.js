@@ -12,6 +12,13 @@
     const confirmMessage = document.getElementById("confirm-message");
     const confirmCancel = document.getElementById("confirm-cancel");
     const confirmHold = document.getElementById("confirm-hold");
+    const screensaverLayer = document.getElementById("lcd-screensaver");
+    const blankScreenLayer = document.getElementById("lcd-blank-screen");
+
+    const IDLE_SCREENSAVER_DELAY_MS = 5 * 60 * 1000;
+    const IDLE_BLANK_DELAY_MS = 10 * 60 * 1000;
+    const buttonSound = new Audio(window.SLOTGUARD_BUTTON_SOUND_URL);
+    buttonSound.preload = "auto";
 
     const workflowScreens = new Set([
         "MOVING",
@@ -23,6 +30,7 @@
         "FAILED",
         "MANUALLY_COMPLETED",
         "BLISTER_EMPTY",
+        "EMPTY_SLOT_CONFIRM",
         "EMPTY_BLISTER_CONFIRM",
         "MISSED",
         "COMM_ERROR",
@@ -40,6 +48,96 @@
     let toastTimer = null;
     let holdTimer = null;
     let holdAction = null;
+    let networkRevealTimer = null;
+    let networkRevealActive = false;
+    let screensaverTimer = null;
+    let blankScreenTimer = null;
+    let idleMode = "active";
+    let idleBlocked = true;
+    let suppressWakeClickUntil = 0;
+
+    function clearIdleTimers() {
+        window.clearTimeout(screensaverTimer);
+        window.clearTimeout(blankScreenTimer);
+        screensaverTimer = null;
+        blankScreenTimer = null;
+    }
+
+    function setIdleMode(mode) {
+        idleMode = mode;
+        screensaverLayer.hidden = mode !== "screensaver";
+        blankScreenLayer.hidden = mode !== "blank";
+    }
+
+    function resetIdleCountdown() {
+        clearIdleTimers();
+        if (idleBlocked) {
+            return;
+        }
+        screensaverTimer = window.setTimeout(() => {
+            if (!idleBlocked) {
+                setIdleMode("screensaver");
+            }
+        }, IDLE_SCREENSAVER_DELAY_MS);
+        blankScreenTimer = window.setTimeout(() => {
+            if (!idleBlocked) {
+                setIdleMode("blank");
+            }
+        }, IDLE_BLANK_DELAY_MS);
+    }
+
+    function idleShouldBeBlocked() {
+        return latestStatus === null
+            || workflowScreens.has(latestStatus.screen)
+            || !confirmLayer.hidden;
+    }
+
+    function updateIdleAvailability() {
+        const blocked = idleShouldBeBlocked();
+        if (blocked === idleBlocked) {
+            return;
+        }
+        idleBlocked = blocked;
+        if (blocked) {
+            clearIdleTimers();
+            setIdleMode("active");
+        } else {
+            resetIdleCountdown();
+        }
+    }
+
+    function handleUserActivity(event) {
+        if (idleMode !== "active") {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            suppressWakeClickUntil = Date.now() + 600;
+            setIdleMode("active");
+        }
+        resetIdleCountdown();
+    }
+
+    function playButtonSound(event) {
+        const target = event.target;
+        const button = target && target.closest
+            ? target.closest("button")
+            : null;
+        if (!button || button.disabled || idleMode !== "active") {
+            return;
+        }
+        const volumeStep = latestStatus && latestStatus.settings
+            ? Number(latestStatus.settings.volume_step)
+            : 5;
+        if (!Number.isFinite(volumeStep) || volumeStep <= 0) {
+            return;
+        }
+        buttonSound.pause();
+        buttonSound.currentTime = 0;
+        buttonSound.volume = Math.min(0.6, volumeStep * 0.06);
+        const playback = buttonSound.play();
+        if (playback && playback.catch) {
+            playback.catch(() => {});
+        }
+    }
 
     function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -248,6 +346,24 @@
                     ${common}
                     <p>잠시 후 홈 화면으로 돌아갑니다</p>
                 </section>`;
+        } else if (status.screen === "EMPTY_SLOT_CONFIRM") {
+            html = `
+                <section class="lcd-empty-choice lcd-empty-slot-choice">
+                    <div class="lcd-empty-choice-info">
+                        <h1>약 배출이 확인되지 않았습니다</h1>
+                        <p>배출구를 확인하고 실제로 약이 나왔는지 선택해 주세요</p>
+                    </div>
+                    <div class="lcd-empty-choice-actions">
+                        <button id="empty-slot-dispensed" type="button"
+                                class="lcd-primary lcd-empty-choice-button">
+                            약이 나왔음
+                        </button>
+                        <button id="empty-slot-empty" type="button"
+                                class="lcd-secondary lcd-empty-choice-button">
+                            약이 나오지 않음
+                        </button>
+                    </div>
+                </section>`;
         } else if (status.screen === "EMPTY_BLISTER_CONFIRM") {
             html = `
                 <section class="lcd-empty-choice">
@@ -287,7 +403,7 @@
                     <div class="lcd-icon" aria-hidden="true">!</div>
                     <h1 class="lcd-title">복약 허용시간이 지났습니다</h1>
                     ${common}
-                    <button id="result-ack" type="button" class="lcd-secondary">화면 확인</button>
+                    <p>5초 후 자동으로 닫히며 다음 예약은 계속됩니다</p>
                 </section>`;
         } else if (status.screen === "COMM_ERROR") {
             html = `
@@ -343,8 +459,8 @@
             : device.audio === "MUTED"
                 ? "음소거"
                 : "사용";
-        const row = (label, value, good) => `
-            <div class="lcd-device-row">
+        const row = (label, value, good, id = "") => `
+            <div class="lcd-device-row"${id ? ` id="${id}"` : ""}>
                 <span>${escapeHtml(label)}</span>
                 <strong class="${good ? "is-ok" : "is-error"}">${escapeHtml(value)}</strong>
             </div>`;
@@ -353,10 +469,16 @@
                 ${row("SLOT-GUARD", `정상 v${status.app_version}`, device.app === "OK")}
                 ${row("ATmega UART", device.uart === "CONNECTED" ? "연결됨" : "확인 필요", device.uart === "CONNECTED")}
                 ${row("데이터베이스", "정상", device.database === "OK")}
-                ${row("네트워크", device.network === "CONNECTED" ? "연결됨" : "오프라인", true)}
+                ${row(
+                    "네트워크",
+                    device.network === "CONNECTED" ? "연결됨" : "오프라인",
+                    device.network === "CONNECTED",
+                    "network-status-row"
+                )}
                 ${row("장치 시간", status.time_ready ? "설정됨" : "설정 필요", status.time_ready)}
                 ${row("음성", audioText, !audioDisabled)}
             </section>`;
+        bindNetworkModeReveal();
     }
 
     function renderSettings(status) {
@@ -484,10 +606,38 @@
                 await refreshStatus();
             });
         }
+
+        const emptySlotDispensed = document.getElementById(
+            "empty-slot-dispensed"
+        );
+        const emptySlotEmpty = document.getElementById("empty-slot-empty");
+        if (emptySlotDispensed) {
+            emptySlotDispensed.addEventListener("click", async () => {
+                emptySlotDispensed.disabled = true;
+                emptySlotEmpty.disabled = true;
+                await postJson("/api/display/empty-slot-choice", {
+                    schedule_id: schedule.id,
+                    choice: "dispensed"
+                });
+                await refreshStatus();
+            });
+        }
+        if (emptySlotEmpty) {
+            emptySlotEmpty.addEventListener("click", async () => {
+                emptySlotDispensed.disabled = true;
+                emptySlotEmpty.disabled = true;
+                await postJson("/api/display/empty-slot-choice", {
+                    schedule_id: schedule.id,
+                    choice: "empty"
+                });
+                await refreshStatus();
+            });
+        }
     }
 
     function render(status) {
         latestStatus = status;
+        updateIdleAvailability();
         headerTime.textContent = status.now ? status.now.slice(0, 5) : "--:--";
         const deviceOk = status.device
             && status.device.uart === "CONNECTED"
@@ -496,6 +646,9 @@
         headerDevice.className = `lcd-device-state ${deviceOk ? "is-ok" : "is-error"}`;
 
         const locked = workflowScreens.has(status.screen);
+        if (locked && networkRevealActive) {
+            clearNetworkModeReveal();
+        }
         nav.classList.toggle("is-locked", locked);
         nav.querySelectorAll("button").forEach((button) => {
             button.classList.toggle("is-active", !locked && button.dataset.view === localView);
@@ -506,7 +659,9 @@
         } else if (locked) {
             renderWorkflow(status);
         } else if (localView === "device") {
-            renderDevice(status);
+            if (!networkRevealActive) {
+                renderDevice(status);
+            }
         } else if (localView === "settings") {
             renderSettings(status);
         } else if (status.screen === "TIME_REQUIRED") {
@@ -529,6 +684,89 @@
             throw error;
         }
         return result;
+    }
+
+    async function getJson(url) {
+        const response = await fetch(url, {cache: "no-store"});
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const error = new Error(result.message || "요청을 처리하지 못했습니다.");
+            showToast(error.message);
+            throw error;
+        }
+        return result;
+    }
+
+    function networkModeLabel(mode) {
+        if (mode === "operation") {
+            return "운영 모드";
+        }
+        if (mode === "development") {
+            return "개발 모드";
+        }
+        return "확인 불가";
+    }
+
+    async function switchNetworkMode(mode) {
+        showToast(`${networkModeLabel(mode)}로 전환 중입니다.`);
+        const result = await postJson("/api/display/network-mode", {mode});
+        showToast(`${networkModeLabel(result.mode)}로 전환했습니다.`);
+        await refreshStatus();
+    }
+
+    async function openNetworkModeConfirmation() {
+        try {
+            const result = await getJson("/api/display/network-mode");
+            const targetMode = result.mode === "operation"
+                ? "development"
+                : "operation";
+            const targetLabel = networkModeLabel(targetMode);
+            const message = result.mode === "operation"
+                ? `현재 운영 모드입니다. PC 핫스팟을 켠 뒤 ${targetLabel}로 전환하세요.`
+                : `현재 ${networkModeLabel(result.mode)}입니다. SLOT-GUARD AP를 켜는 ${targetLabel}로 전환합니다.`;
+            openHoldConfirmation(
+                `${targetLabel} 전환`,
+                message,
+                () => switchNetworkMode(targetMode)
+            );
+        } catch (error) {
+            // getJson already shows the user-facing error.
+        }
+    }
+
+    function clearNetworkModeReveal() {
+        window.clearTimeout(networkRevealTimer);
+        networkRevealTimer = null;
+        networkRevealActive = false;
+    }
+
+    function bindNetworkModeReveal() {
+        const networkRow = document.getElementById("network-status-row");
+        if (!networkRow) {
+            return;
+        }
+
+        networkRow.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+        });
+        networkRow.addEventListener("pointerdown", (event) => {
+            if (networkRevealTimer !== null) {
+                return;
+            }
+            event.preventDefault();
+            networkRevealActive = true;
+            if (networkRow.setPointerCapture) {
+                networkRow.setPointerCapture(event.pointerId);
+            }
+            networkRevealTimer = window.setTimeout(() => {
+                networkRevealTimer = null;
+                networkRevealActive = false;
+                openNetworkModeConfirmation();
+            }, 5000);
+        });
+        ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
+            networkRow.addEventListener(eventName, clearNetworkModeReveal);
+        });
     }
 
     async function saveSettings(voiceRepeat, volumeStep) {
@@ -576,6 +814,7 @@
         confirmHold.textContent = "2초간 눌러 실행";
         holdAction = action;
         confirmLayer.hidden = false;
+        updateIdleAvailability();
     }
 
     function clearHold() {
@@ -588,7 +827,18 @@
         clearHold();
         holdAction = null;
         confirmLayer.hidden = true;
+        updateIdleAvailability();
     }
+
+    document.addEventListener("pointerdown", handleUserActivity, true);
+    document.addEventListener("keydown", handleUserActivity, true);
+    document.addEventListener("pointerdown", playButtonSound, true);
+    document.addEventListener("click", (event) => {
+        if (Date.now() < suppressWakeClickUntil) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    }, true);
 
     confirmCancel.addEventListener("click", closeConfirmation);
     ["pointerup", "pointercancel", "pointerleave"].forEach((eventName) => {
@@ -614,6 +864,7 @@
 
     nav.querySelectorAll("button").forEach((button) => {
         button.addEventListener("click", () => {
+            clearNetworkModeReveal();
             localView = button.dataset.view;
             if (latestStatus) {
                 render(latestStatus);

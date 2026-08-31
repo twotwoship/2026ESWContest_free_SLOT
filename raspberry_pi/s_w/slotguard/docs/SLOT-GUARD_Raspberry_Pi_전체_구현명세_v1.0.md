@@ -5,7 +5,7 @@
 대상: Raspberry Pi 소프트웨어·시스템 통합·시험 담당자  
 대상 장치: Raspberry Pi 4 Model B Rev 1.5  
 연동 장치: Waveshare 4inch RPi LCD (A) Rev 2.0, ATmega128A 제어보드, 헤드폰 오디오 출력  
-소프트웨어 기준: SLOT-GUARD 앱 v0.3.0, Raspberry Pi OS 64-bit / Debian 13 Trixie  
+소프트웨어 기준: SLOT-GUARD 앱 v0.3.1, Raspberry Pi OS 64-bit / Debian 13 Trixie  
 연관 문서: `ATmega128A_UART_구현명세_v1.0`, `SLOT-GUARD_4inch_LCD_UIUX_기획서_v0.2`
 
 ## 1. 문서 목적과 범위
@@ -267,9 +267,9 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 
 ```text
 1순위: 마지막 빈 슬롯의 BLISTER_EMPTY / EMPTY_BLISTER_CONFIRM
-2순위: 확인되지 않은 FAILED / MISSED / COMM_ERROR
+2순위: 확인되지 않은 FAILED / COMM_ERROR
 3순위: 활성 MOVING / READY_TO_DISPENSE / DISPENSING
-4순위: 완료 후 5초 이내 DISPENSED / MANUALLY_COMPLETED
+4순위: 완료 후 5초 이내 DISPENSED / MANUALLY_COMPLETED / MISSED
 5순위: 현재 부팅 시간 미설정 TIME_REQUIRED
 6순위: 일반 블리스터 소진 BLISTER_EMPTY
 7순위: HOME 또는 사용자가 선택한 장치 상태·환경 설정
@@ -286,7 +286,7 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 | DISPENSED | 배출 확인 | 없음 | 5초 뒤 홈 |
 | FAILED | 센서 미감지 안내 | 수동 완료 또는 복용하지 못함 | 완료 또는 확인 처리 |
 | MANUALLY_COMPLETED | 수동 완료 기록 | 없음 | 5초 뒤 홈 |
-| MISSED | 허용시간 종료 | 화면 확인 | 홈 |
+| MISSED | 허용시간 종료 | 없음 | 5초 뒤 홈 또는 다음 예약 |
 | COMM_ERROR | UART 오류코드 | 화면 확인 | 홈 |
 | TIME_REQUIRED | 관리자 웹 시간 설정 안내 | 없음 | 시간 설정 후 홈 |
 | BLISTER_EMPTY | 새 블리스터 안내 | 2초 확인 후 초기화 | 빈 슬롯 복약이면 수동 확인, 아니면 HOME |
@@ -300,7 +300,7 @@ LCD JavaScript는 `/api/display-status`를 1초마다 조회하고 서버 상태
 | `/api/display/dispense` | localhost, READY 상태 | DISPENSE 준비·즉시 전송 |
 | `/api/display/manual-complete` | localhost, FAILED 상태 | 수동 완료와 좌표 1칸 증가 |
 | `/api/display/empty-blister-choice` | localhost, 마지막 빈 슬롯 교체 완료 | 수동 완료 또는 동일 복약 재개 |
-| `/api/display/acknowledge` | localhost, 실패 계열 상태 | 사용자 확인 기록 |
+| `/api/display/acknowledge` | localhost, FAILED 또는 COMM_ERROR | 사용자 확인 기록 |
 | `/api/display/settings` | localhost | 음성 반복·볼륨 저장 |
 | `/api/display/test-volume` | localhost, 볼륨 1 이상 | 복약 음성 1회 재생 |
 | `/api/display/reset-blister` | localhost, 활성 일정 없음 | 좌표와 소진 상태 초기화 |
@@ -349,7 +349,7 @@ MOVING 또는 DISPENSING에서 허용시간 종료
 | DISPENSED | 센서가 정제 통과를 감지 | 종료 | 1칸 |
 | FAILED | 서보 동작 후 센서 미감지 | 종료·확인 필요 | 없음 |
 | MANUALLY_COMPLETED | 사용자가 직접 복용 확인 | 종료 | 1칸 |
-| MISSED | 복약 허용시간 종료 | 종료·확인 필요 | 없음 |
+| MISSED | 복약 허용시간 종료 | 종료·5초 자동 표시 | 없음 |
 | COMM_ERROR | 통신 단계가 허용시간까지 미완료 | 종료·확인 필요 | 없음 |
 
 ### 8.3 실패 결과 R=0 정책
@@ -413,7 +413,7 @@ LCD: 기존의 큰 약 배출 버튼 표시
 다음 조건에서는 새 예약을 시작하지 않는다.
 
 - 현재 부팅에서 시스템 시간이 설정되지 않음
-- 확인되지 않은 `FAILED`, `MISSED`, `COMM_ERROR`가 있음
+- 확인되지 않은 `FAILED`, `COMM_ERROR`가 있음
 - ACK되지 않은 TIMEOUT이 있음
 - 이미 활성 일정이 있음
 - 블리스터가 10칸 모두 사용되어 소진 상태임
@@ -655,7 +655,7 @@ XYR
 | EMPTY_BLISTER_MANUAL_NOT_TAKEN | 새 블리스터에서 수동미복약 선택, MOVE 재개 |
 | MISSED | 허용시간 종료 |
 | COMM_ERROR | 통신 단계 오류 |
-| RESULT_ACKNOWLEDGED | 사용자가 실패 화면 확인 |
+| RESULT_ACKNOWLEDGED | 사용자가 FAILED 또는 COMM_ERROR 화면 확인 |
 | BLISTER_RESET | 새 블리스터 초기화 |
 | DEVICE_SETTINGS_UPDATED | 음성 설정 저장 |
 
@@ -793,7 +793,7 @@ XYR
 | RESULT R=0 | NO_DROP_DETECTED | 배출 실패 | 직접 복용 여부 선택 |
 | RESULT R=2, 다음 슬롯 있음 | EMPTY_BLISTER_SLOT 이벤트 | 다음 약 이동 중 | WAIT 후 약 배출 재선택 |
 | RESULT R=2, 마지막 슬롯 | EMPTY_BLISTER_SLOT | 블리스터 교체 | 초기화 후 수동복약 여부 선택 |
-| 교체 중 허용시간 종료 후 수동미복약 | DOSE_WINDOW_EXPIRED | 미복약 | 화면 확인 |
+| 교체 중 허용시간 종료 후 수동미복약 | DOSE_WINDOW_EXPIRED | 미복약 | 5초 뒤 자동 닫힘 |
 | RESULT 좌표 불일치 | 일정 유지, UART 오류 | 배출 중 유지 | AT의 저장 좌표 확인 |
 | AT INVALID_FORMAT | 현재 상태 유지, 같은 UART 프레임 즉시 재전송 | 진행 화면 유지 | 반복 시 배선·baud·프레임 생성 점검 |
 | 기타 AT ERROR | `AT_오류코드` | 통신 오류 | AT 명세에 따라 점검 |
@@ -802,7 +802,7 @@ XYR
 | 시간 helper 실패 | HTTP 503 | 시간 미설정 | helper와 sudoers 확인 |
 | 블리스터 소진 | 처리 차단 | 교체 안내 | 새 블리스터 후 초기화 |
 
-실패 계열 화면은 사용자가 확인하기 전까지 다음 예약을 막는다. 오류를 단순히 숨기기 위해 DB 상태를 직접 수정하지 않고 LCD 확인 흐름 또는 정비용 전체 초기화를 사용한다.
+`FAILED`와 `COMM_ERROR` 화면은 사용자가 확인하기 전까지 다음 예약을 막는다. `MISSED`는 기록과 좌표를 그대로 유지하면서 5초간 표시한 뒤 자동으로 닫고 다음 예약 처리를 계속한다. 오류를 단순히 숨기기 위해 DB 상태를 직접 수정하지 않고 LCD 확인 흐름 또는 정비용 전체 초기화를 사용한다.
 
 ## 18. 로그와 운영 점검
 

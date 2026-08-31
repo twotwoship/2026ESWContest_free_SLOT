@@ -162,6 +162,24 @@ button {
     background: #dc2626;
 }
 
+.reset-status-message {
+    min-height: 1.5em;
+    margin: 10px 0 0;
+    font-weight: bold;
+}
+
+.reset-status-message.pending {
+    color: #1d4ed8;
+}
+
+.reset-status-message.success {
+    color: #15803d;
+}
+
+.reset-status-message.failure {
+    color: #b91c1c;
+}
+
 .compact-button {
     padding: 8px 12px;
 }

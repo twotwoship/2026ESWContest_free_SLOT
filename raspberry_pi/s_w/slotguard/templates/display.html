@@ -51,8 +51,26 @@
         </div>
     </div>
 
+    <div id="lcd-screensaver" class="lcd-idle-layer lcd-screensaver"
+         aria-label="SLOT-GUARD 화면보호기" hidden>
+        <div class="lcd-screensaver-track" aria-hidden="true">
+            <span class="lcd-screensaver-brand">약SLOT-GUARD</span>
+            <span class="lcd-screensaver-brand">약SLOT-GUARD</span>
+        </div>
+    </div>
+
+    <div id="lcd-blank-screen" class="lcd-idle-layer lcd-blank-screen"
+         aria-label="절전 화면" hidden></div>
+
     <script>
         window.SLOTGUARD_VERSION = {{ app_version|tojson }};
+        window.SLOTGUARD_BUTTON_SOUND_URL = {{
+            url_for(
+                'static',
+                filename='audio/button-soft-tap.wav',
+                v=app_version
+            )|tojson
+        }};
     </script>
     <script src="{{ url_for('static', filename='display.js', v=app_version) }}"></script>
 </body>
