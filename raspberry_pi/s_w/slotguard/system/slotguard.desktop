@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=SLOT-GUARD LCD
-Comment=480x320 touch kiosk
-Exec=/usr/local/bin/slotguard-xsession
-Type=Application
-DesktopNames=SLOT-GUARD
