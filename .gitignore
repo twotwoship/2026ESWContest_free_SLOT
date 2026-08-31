@@ -1,1 +1,6 @@
 .vs
+Debug/
+Release/
+*.componentinfo.xml
+*.suo
+*.user
